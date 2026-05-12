@@ -30,6 +30,12 @@ importers:
         specifier: workspace:*
         version: link:../../domain
 
+  packages/adapters/storage-memory:
+    dependencies:
+      '@fairhandle/domain':
+        specifier: workspace:*
+        version: link:../../domain
+
   packages/domain: {}
 
 packages:
