@@ -26,6 +26,7 @@ export type RoomState =
   | 'waiting'
   | 'active'
   | 'consolidating'
+  | 'paused'
   | 'closing'
   | 'closed'
 

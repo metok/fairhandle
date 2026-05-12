@@ -231,16 +231,31 @@ export class Room {
       }
     }
     const event = this.log.append(envelope, this.deps.clock.nowIso())
-    if (
-      this.consecutive_disputes >= 3 &&
-      this.config.deadlock_policy === 'best_effort'
-    ) {
-      this.hard_limit_hit = 'deadlock'
-      this.state = 'closing'
-      return event
+    if (this.consecutive_disputes >= 3) {
+      if (this.config.deadlock_policy === 'best_effort') {
+        this.hard_limit_hit = 'deadlock'
+        this.state = 'closing'
+        return event
+      }
+      if (this.config.deadlock_policy === 'escalate_to_humans') {
+        this.state = 'paused'
+        return event
+      }
     }
     if (this.state === 'consolidating') this.advanceAfterConsolidation()
     return event
+  }
+
+  async humanAuthorizeContinue(): Promise<void> {
+    if (this.state !== 'paused') throw new Error(`cannot continue: state is ${this.state}`)
+    this.consecutive_disputes = 0
+    this.state = 'active'
+  }
+
+  async humanAuthorizeClose(): Promise<void> {
+    if (this.state !== 'paused') throw new Error(`cannot close: state is ${this.state}`)
+    this.hard_limit_hit = 'deadlock'
+    this.state = 'closing'
   }
 
   private advanceAfterConsolidation(): void {
