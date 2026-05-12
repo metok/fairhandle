@@ -246,7 +246,9 @@ export class Room {
   }
 
   async finalize(): Promise<void> {
-    if (this.state !== 'closing') throw new Error(`cannot finalize: state is ${this.state}`)
+    if (this.state !== 'closing') {
+      throw new Error(`cannot finalize: room must be in closing state, got ${this.state}`)
+    }
     this.state = 'closed'
   }
 
