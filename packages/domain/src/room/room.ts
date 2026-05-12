@@ -262,7 +262,12 @@ export class Room {
     this.own_proposal = null
     this.peer_proposal = null
     this.current_round++
-    this.state = 'active'
+    if (this.current_turn_index >= this.config.turn_cap) {
+      this.hard_limit_hit = 'turn_cap'
+      this.state = 'closing'
+    } else {
+      this.state = 'active'
+    }
   }
 
   private participantForNodeId(node: 'A' | 'B'): AgentParticipant {
