@@ -53,6 +53,7 @@ export class Room {
   private propose_done_by: AgentId | null = null
   consecutive_disputes = 0
   hard_limit_hit: 'turn_cap' | 'time_cap' | 'deadlock' | null = null
+  private active_started_at_ms: number | null = null
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -102,8 +103,20 @@ export class Room {
     })
     if (this.participants.length === 2) {
       this.state = 'active'
+      this.active_started_at_ms = this.deps.clock.nowMs()
     }
     return [event]
+  }
+
+  private enforceTimeCap(): void {
+    if (this.state !== 'active' && this.state !== 'consolidating') return
+    if (this.active_started_at_ms === null) return
+    const elapsed = this.deps.clock.nowMs() - this.active_started_at_ms
+    if (elapsed >= this.config.time_cap_ms) {
+      this.hard_limit_hit = 'time_cap'
+      this.state = 'closing'
+      throw new Error('time_cap exceeded')
+    }
   }
 
   async handleSend(input: {
@@ -111,6 +124,7 @@ export class Room {
     content_ciphertext: string
     signature: SignatureHex
   }): Promise<Event[]> {
+    this.enforceTimeCap()
     if (this.state !== 'active') {
       throw new Error(`cannot send: state is ${this.state}`)
     }
@@ -148,6 +162,7 @@ export class Room {
     our_node_id: 'A' | 'B'
     signature: SignatureHex
   }): Promise<Event> {
+    this.enforceTimeCap()
     if (this.state !== 'consolidating') {
       throw new Error(`cannot consolidate: state is ${this.state}`)
     }
@@ -183,6 +198,7 @@ export class Room {
     low_node_id: 'A' | 'B'
     signature: SignatureHex
   }): Promise<Event> {
+    this.enforceTimeCap()
     if (this.state !== 'consolidating') throw new Error('not in consolidating')
     if (!this.own_proposal || !this.peer_proposal) throw new Error('missing proposals')
     const a = input.low_node_id === 'A' ? this.own_proposal : this.peer_proposal
@@ -285,6 +301,7 @@ export class Room {
   }
 
   async handleProposeDone(input: { agent_id: AgentId; reason: string; signature: SignatureHex }): Promise<Event[]> {
+    this.enforceTimeCap()
     if (this.state !== 'active') throw new Error(`cannot propose_done: ${this.state}`)
     if (!this.participants.some((p) => p.agent_id === input.agent_id)) {
       throw new Error('unknown agent')
@@ -305,6 +322,7 @@ export class Room {
   }
 
   async handleAcceptDone(input: { agent_id: AgentId; signature: SignatureHex }): Promise<Event[]> {
+    this.enforceTimeCap()
     if (this.state !== 'active') throw new Error(`cannot accept_done: ${this.state}`)
     if (!this.propose_done_by) throw new Error('no propose_done outstanding')
     if (this.propose_done_by === input.agent_id) throw new Error('cannot accept your own propose_done')
@@ -390,7 +408,10 @@ export class Room {
           pubkey: '' as Pubkey, // remote: not known to us locally; left blank in Plan 1 stub
           joined_at_event: last.index,
         })
-        if (this.participants.length === 2) this.state = 'active'
+        if (this.participants.length === 2) {
+          this.state = 'active'
+          this.active_started_at_ms = this.deps.clock.nowMs()
+        }
         break
       }
       case 'send_message': {
