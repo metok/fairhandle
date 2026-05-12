@@ -11,6 +11,7 @@ import type { RoomConfig } from '../types/config.js'
 import type { ClockPort } from '../ports/clock.js'
 import type { SignaturePort } from '../ports/signature.js'
 import type { LLMPort, ConsolidatorOutput } from '../ports/llm.js'
+import type { ArtifactHistoryPort } from '../ports/artifact-history.js'
 import type { Envelope, JoinRoomPayload } from '../types/envelope.js'
 import type { Event } from '../types/event.js'
 import type { Artifact } from '../types/artifact.js'
@@ -33,6 +34,7 @@ export interface RoomDeps {
   config: RoomConfig
   signature: SignaturePort
   clock: ClockPort
+  artifact_history?: ArtifactHistoryPort
 }
 
 export interface JoinInput {
@@ -209,10 +211,12 @@ export class Room {
     const verifyResult = await verifyStructuralAgreement({ a, b, llm: input.llm, low_node_id: input.low_node_id })
 
     let envelope: Envelope
+    let canonicalForCommit: ConsolidatorOutput | null = null
     if (verifyResult.outcome === 'agreed') {
       this.consecutive_disputes = 0
       const canonical = input.low_node_id === 'A' ? a : b
       this.current_artifact = canonical.artifact
+      canonicalForCommit = canonical
       envelope = {
         v: 1,
         room_id: this.deps.room_id,
@@ -250,6 +254,23 @@ export class Room {
       }
     }
     const event = this.log.append(envelope, this.deps.clock.nowIso())
+    if (canonicalForCommit && this.deps.artifact_history) {
+      await this.deps.artifact_history.commit(
+        {
+          round_index: this.current_round,
+          canonical_peer_pubkey: this.participantForNodeId(input.low_node_id).pubkey,
+          other_peer_pubkey: this.participantForNodeId(input.low_node_id === 'A' ? 'B' : 'A').pubkey,
+          canonical_peer_label: this.participantForNodeId(input.low_node_id).role_label,
+          other_peer_label: this.participantForNodeId(input.low_node_id === 'A' ? 'B' : 'A').role_label,
+          merkle_event_hash: event.hash,
+          proposal_hash_a: hashCanonical(a) as HashHex,
+          proposal_hash_b: hashCanonical(b) as HashHex,
+          changelog: canonicalForCommit.changelog,
+          timestamp_iso: event.appended_at,
+        },
+        canonicalForCommit.artifact,
+      )
+    }
     if (this.consecutive_disputes >= 3) {
       if (this.config.deadlock_policy === 'best_effort') {
         this.hard_limit_hit = 'deadlock'
