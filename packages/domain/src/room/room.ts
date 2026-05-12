@@ -52,6 +52,7 @@ export class Room {
   private peer_proposal: ConsolidatorOutput | null = null
   private propose_done_by: AgentId | null = null
   consecutive_disputes = 0
+  hard_limit_hit: 'turn_cap' | 'time_cap' | 'deadlock' | null = null
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -230,7 +231,15 @@ export class Room {
       }
     }
     const event = this.log.append(envelope, this.deps.clock.nowIso())
-    this.advanceAfterConsolidation()
+    if (
+      this.consecutive_disputes >= 3 &&
+      this.config.deadlock_policy === 'best_effort'
+    ) {
+      this.hard_limit_hit = 'deadlock'
+      this.state = 'closing'
+      return event
+    }
+    if (this.state === 'consolidating') this.advanceAfterConsolidation()
     return event
   }
 
