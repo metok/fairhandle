@@ -60,6 +60,27 @@ importers:
         specifier: workspace:*
         version: link:../adapters/signature-stub
 
+  packages/e2e:
+    dependencies:
+      '@fairhandle/channel-memory':
+        specifier: workspace:*
+        version: link:../adapters/channel-memory
+      '@fairhandle/clock-system':
+        specifier: workspace:*
+        version: link:../adapters/clock-system
+      '@fairhandle/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@fairhandle/llm-stub':
+        specifier: workspace:*
+        version: link:../adapters/llm-stub
+      '@fairhandle/signature-stub':
+        specifier: workspace:*
+        version: link:../adapters/signature-stub
+      '@fairhandle/storage-memory':
+        specifier: workspace:*
+        version: link:../adapters/storage-memory
+
 packages:
 
   '@esbuild/aix-ppc64@0.21.5':

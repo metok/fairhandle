@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto'
 import type {
   RoomId,
   RoomState,
-  RoomConfig,
   Pubkey,
   SignatureHex,
   HashHex,
   AgentId,
 } from '../types/ids.js'
+import type { RoomConfig } from '../types/config.js'
 import type { ClockPort } from '../ports/clock.js'
 import type { SignaturePort } from '../ports/signature.js'
 import type { LLMPort, ConsolidatorOutput } from '../ports/llm.js'

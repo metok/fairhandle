@@ -3,7 +3,7 @@ import type { Event } from '../types/event.js'
 import type { RoomId, HashHex } from '../types/ids.js'
 import { hashCanonical, chainEventHash, sha256Hex } from '../crypto/hash.js'
 
-export interface VerifyResult {
+export interface LogVerifyResult {
   ok: boolean
   failed_at_index?: number
   reason?: string
@@ -49,7 +49,7 @@ export class MerkleLog {
     return event
   }
 
-  verifyIntegrity(): VerifyResult {
+  verifyIntegrity(): LogVerifyResult {
     for (let i = 0; i < this.events.length; i++) {
       const e = this.events[i]!
       const expectedPrev = i === 0 ? sha256Hex(this.room) : this.events[i - 1]!.hash

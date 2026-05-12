@@ -1,0 +1,19 @@
+{
+  "name": "@fairhandle/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/run-scenario.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@fairhandle/domain": "workspace:*",
+    "@fairhandle/signature-stub": "workspace:*",
+    "@fairhandle/channel-memory": "workspace:*",
+    "@fairhandle/storage-memory": "workspace:*",
+    "@fairhandle/llm-stub": "workspace:*",
+    "@fairhandle/clock-system": "workspace:*"
+  }
+}
