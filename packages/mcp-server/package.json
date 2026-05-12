@@ -1,0 +1,22 @@
+{
+  "name": "@fairhandle/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": { "fairhandle-mcp": "./bin/fairhandle-mcp" },
+  "scripts": { "build": "tsc -b", "test": "vitest run", "typecheck": "tsc -b" },
+  "dependencies": {
+    "@fairhandle/domain": "workspace:*",
+    "@fairhandle/signature-ed25519": "workspace:*",
+    "@fairhandle/channel-ws": "workspace:*",
+    "@fairhandle/storage-sqlite": "workspace:*",
+    "@fairhandle/storage-git": "workspace:*",
+    "@fairhandle/llm-anthropic": "workspace:*",
+    "@fairhandle/identity-keychain": "workspace:*",
+    "@fairhandle/clock-system": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "fastify": "^5.1.0",
+    "dotenv": "^16.4.5"
+  }
+}
