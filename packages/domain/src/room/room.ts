@@ -54,6 +54,7 @@ export class Room {
   consecutive_disputes = 0
   hard_limit_hit: 'turn_cap' | 'time_cap' | 'deadlock' | null = null
   private active_started_at_ms: number | null = null
+  walk_away_by: AgentId | null = null
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -300,6 +301,30 @@ export class Room {
     this.state = 'closed'
   }
 
+  async handleLeave(input: { agent_id: AgentId; reason: string; signature: SignatureHex }): Promise<Event[]> {
+    if (this.state !== 'active' && this.state !== 'consolidating' && this.state !== 'paused') {
+      throw new Error(`cannot leave: state is ${this.state}`)
+    }
+    if (!this.participants.some((p) => p.agent_id === input.agent_id)) {
+      throw new Error('unknown agent')
+    }
+    this.walk_away_by = input.agent_id
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: input.agent_id,
+      type: 'leave_room',
+      payload: { type: 'leave_room', reason: input.reason },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    const ev = this.log.append(envelope, this.deps.clock.nowIso())
+    this.state = 'closing'
+    return [ev]
+  }
+
   async handleProposeDone(input: { agent_id: AgentId; reason: string; signature: SignatureHex }): Promise<Event[]> {
     this.enforceTimeCap()
     if (this.state !== 'active') throw new Error(`cannot propose_done: ${this.state}`)
@@ -444,6 +469,11 @@ export class Room {
         break
       }
       case 'accept_done': {
+        this.state = 'closing'
+        break
+      }
+      case 'leave_room': {
+        this.walk_away_by = env.agent_id
         this.state = 'closing'
         break
       }
