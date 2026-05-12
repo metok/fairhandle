@@ -52,51 +52,61 @@ async function main() {
   for (const ev of joinEvents) await channel.send(ev.payload)
   await storeNew(room, storage, room_id as RoomId)
 
-  // Wait until both peers have joined.
   await waitFor(() => room.state === 'active', 30_000, 'never reached active')
 
   const myIdx = role === 'A' ? 0 : 1
   const myAgentId = room.participants[myIdx]!.agent_id
 
-  for (let i = 0; i < messages.length; i++) {
+  // Loop is round-based: one message per peer per round, then a consolidation pass.
+  const numRounds = messages.length
+  for (let r = 0; r < numRounds; r++) {
+    await waitFor(() => room.state === 'active', 60_000, `never returned to active for round ${r}`)
     await waitFor(
-      () => room.current_turn_index % 2 === myIdx && room.state === 'active',
-      30_000,
-      'not my turn',
+      () => room.current_turn_index % 2 === myIdx,
+      60_000,
+      `not my turn for round ${r}`,
     )
     const evs = await room.handleSend({
       agent_id: myAgentId,
-      content_ciphertext: messages[i]!,
+      content_ciphertext: messages[r]!,
       signature: 'placeholder' as never,
     })
     for (const ev of evs) await channel.send(ev.payload)
     await storeNew(room, storage, room_id as RoomId)
 
-    if (room.state === 'consolidating') {
-      const prop = await room.runOwnConsolidation({
+    // Wait for the round to complete (both sides have sent). On the second-sender
+    // side this is already true after handleSend; on the first-sender side it
+    // becomes true once the peer's send arrives via applyRemote.
+    await waitFor(
+      () => room.state === 'consolidating',
+      60_000,
+      `never reached consolidating for round ${r}`,
+    )
+
+    const prop = await room.runOwnConsolidation({
+      llm,
+      our_node_id: role,
+      signature: 'placeholder' as never,
+    })
+    await channel.send(prop.payload)
+    await storeNew(room, storage, room_id as RoomId)
+
+    await waitFor(() => room.peerProposal != null, 120_000, `peer proposal never arrived for round ${r}`)
+
+    if (role === 'A') {
+      const merge = await room.attemptMerge({
         llm,
-        our_node_id: role,
+        low_node_id: 'A',
         signature: 'placeholder' as never,
       })
-      await channel.send(prop.payload)
+      await channel.send(merge.payload)
       await storeNew(room, storage, room_id as RoomId)
-
-      await waitFor(() => room.peerProposal != null, 60_000, 'peer proposal never arrived')
-      if (role === 'A') {
-        const merge = await room.attemptMerge({
-          llm,
-          low_node_id: 'A',
-          signature: 'placeholder' as never,
-        })
-        await channel.send(merge.payload)
-        await storeNew(room, storage, room_id as RoomId)
-      } else {
-        await waitFor(
-          () => room.state === 'active' || room.state === 'closing',
-          60_000,
-          'never resumed after consolidation',
-        )
-      }
+    } else {
+      await waitFor(
+        () => room.state === 'active' || room.state === 'closing',
+        120_000,
+        `never resumed after consolidation for round ${r}`,
+      )
     }
   }
 
@@ -107,6 +117,7 @@ async function main() {
       signature: 'placeholder' as never,
     })
     for (const ev of p) await channel.send(ev.payload)
+    await storeNew(room, storage, room_id as RoomId)
   } else {
     await waitFor(() => room.proposeDoneBy != null, 30_000, 'propose_done never seen')
     const a = await room.handleAcceptDone({
@@ -114,6 +125,7 @@ async function main() {
       signature: 'placeholder' as never,
     })
     for (const ev of a) await channel.send(ev.payload)
+    await storeNew(room, storage, room_id as RoomId)
   }
   await waitFor(() => room.state === 'closing', 30_000, 'never reached closing')
   await room.finalize()
