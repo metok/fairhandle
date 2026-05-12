@@ -13,9 +13,15 @@
     "test": "vitest run",
     "typecheck": "tsc -b"
   },
+  "dependencies": {
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.4.0",
+    "@noble/curves": "^1.6.0"
+  },
   "devDependencies": {
     "@fairhandle/signature-stub": "workspace:*",
     "@fairhandle/clock-system": "workspace:*",
-    "@fairhandle/llm-stub": "workspace:*"
+    "@fairhandle/llm-stub": "workspace:*",
+    "@fairhandle/signature-ed25519": "workspace:*"
   }
 }

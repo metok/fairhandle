@@ -61,6 +61,16 @@ importers:
         version: link:../../domain
 
   packages/domain:
+    dependencies:
+      '@noble/curves':
+        specifier: ^1.6.0
+        version: 1.9.7
+      '@noble/ed25519':
+        specifier: ^2.1.0
+        version: 2.3.0
+      '@noble/hashes':
+        specifier: ^1.4.0
+        version: 1.8.0
     devDependencies:
       '@fairhandle/clock-system':
         specifier: workspace:*
@@ -68,6 +78,9 @@ importers:
       '@fairhandle/llm-stub':
         specifier: workspace:*
         version: link:../adapters/llm-stub
+      '@fairhandle/signature-ed25519':
+        specifier: workspace:*
+        version: link:../adapters/signature-ed25519
       '@fairhandle/signature-stub':
         specifier: workspace:*
         version: link:../adapters/signature-stub
@@ -239,6 +252,10 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
+
+  '@noble/curves@1.9.7':
+    resolution: {integrity: sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@noble/ed25519@2.3.0':
     resolution: {integrity: sha512-M7dvXL2B92/M7dw9+gzuydL8qn/jiqNHaoR3Q+cb1q1GHV7uwE17WCyFMG+Y+TZb5izcaXk5TdJRrDUxHXL78A==}
@@ -776,6 +793,10 @@ snapshots:
       '@sinclair/typebox': 0.27.10
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
+
+  '@noble/curves@1.9.7':
+    dependencies:
+      '@noble/hashes': 1.8.0
 
   '@noble/ed25519@2.3.0': {}
 
