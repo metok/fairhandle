@@ -14,6 +14,7 @@ import type { Envelope, JoinRoomPayload } from '../types/envelope.js'
 import type { Event } from '../types/event.js'
 import { MerkleLog } from '../log/merkle-log.js'
 import { validateRoomConfig } from '../types/config.js'
+import { sha256Hex } from '../crypto/hash.js'
 
 export interface AgentParticipant {
   agent_id: AgentId
@@ -129,5 +130,54 @@ export class Room {
       this.state = 'consolidating'
     }
     return [event]
+  }
+
+  async applyRemote(remote: Event): Promise<void> {
+    // Re-create the envelope from the remote event payload.
+    // Verify chain continuity; do not re-sign — just append the same envelope
+    // and let the MerkleLog recompute its own hash (which must match remote.hash
+    // because both peers canonicalize the same payload identically).
+    const env = remote.payload
+    // Discard if from one of our own commands (idempotent re-delivery).
+    if (this.log.getEvents().some((e) => e.hash === remote.hash)) return
+    const localPrev = (this.log.getHeadHash() ?? this.hashForIndex0()) as HashHex
+    if (remote.prev_hash !== localPrev) {
+      throw new Error(`chain divergence: expected prev ${localPrev}, got ${remote.prev_hash}`)
+    }
+    const event = this.log.append(env, this.deps.clock.nowIso())
+    if (event.hash !== remote.hash) {
+      throw new Error(`hash mismatch after append: ${event.hash} != ${remote.hash}`)
+    }
+    this.advanceStateFromEnvelope(env)
+  }
+
+  private hashForIndex0(): string {
+    return sha256Hex(this.deps.room_id)
+  }
+
+  private advanceStateFromEnvelope(env: Envelope): void {
+    switch (env.type) {
+      case 'join_room': {
+        const last = this.log.getHead()!
+        const payload = env.payload as JoinRoomPayload
+        if (this.participants.some((p) => p.agent_id === env.agent_id)) return
+        this.participants.push({
+          agent_id: env.agent_id,
+          role_label: payload.role_label,
+          pubkey: '' as Pubkey, // remote: not known to us locally; left blank in Plan 1 stub
+          joined_at_event: last.index,
+        })
+        if (this.participants.length === 2) this.state = 'active'
+        break
+      }
+      case 'send_message': {
+        this.current_turn_index++
+        if (this.current_turn_index % 2 === 0) this.state = 'consolidating'
+        break
+      }
+      default:
+        // Other envelope types are handled in later tasks.
+        break
+    }
   }
 }
