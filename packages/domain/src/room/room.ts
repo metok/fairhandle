@@ -17,7 +17,7 @@ import type { Artifact } from '../types/artifact.js'
 import type { Message } from '../types/message.js'
 import { MerkleLog } from '../log/merkle-log.js'
 import { validateRoomConfig } from '../types/config.js'
-import { sha256Hex, hashCanonical } from '../crypto/hash.js'
+import { sha256Hex, hashCanonical, chainEventHash } from '../crypto/hash.js'
 import { runRoundConsolidation } from '../consolidation/orchestrator.js'
 import { verifyStructuralAgreement } from '../consolidation/verifier.js'
 
@@ -302,6 +302,25 @@ export class Room {
       turn_index: this.current_turn_index - 2 + i,
       round_index: this.current_round,
     }))
+  }
+
+  /**
+   * Receive a peer's envelope from the wire and apply it.
+   * Rebuilds the Event locally (deterministic) and calls applyRemote().
+   */
+  async handleRemoteEnvelope(env: Envelope): Promise<void> {
+    const prev_hash = (this.log.getHeadHash() ?? sha256Hex(this.deps.room_id)) as HashHex
+    const payload_hash = hashCanonical(env)
+    const hash = chainEventHash(prev_hash, payload_hash)
+    const reconstructed: Event = {
+      index: this.log.length,
+      prev_hash,
+      payload: env,
+      payload_hash,
+      hash,
+      appended_at: this.deps.clock.nowIso(),
+    }
+    await this.applyRemote(reconstructed)
   }
 
   async applyRemote(remote: Event): Promise<void> {
