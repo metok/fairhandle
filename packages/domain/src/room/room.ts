@@ -245,6 +245,11 @@ export class Room {
     return p
   }
 
+  async finalize(): Promise<void> {
+    if (this.state !== 'closing') throw new Error(`cannot finalize: state is ${this.state}`)
+    this.state = 'closed'
+  }
+
   async handleProposeDone(input: { agent_id: AgentId; reason: string; signature: SignatureHex }): Promise<Event[]> {
     if (this.state !== 'active') throw new Error(`cannot propose_done: ${this.state}`)
     if (!this.participants.some((p) => p.agent_id === input.agent_id)) {
