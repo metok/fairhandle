@@ -53,6 +53,9 @@ importers:
       '@fairhandle/clock-system':
         specifier: workspace:*
         version: link:../adapters/clock-system
+      '@fairhandle/llm-stub':
+        specifier: workspace:*
+        version: link:../adapters/llm-stub
       '@fairhandle/signature-stub':
         specifier: workspace:*
         version: link:../adapters/signature-stub

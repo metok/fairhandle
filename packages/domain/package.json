@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@fairhandle/signature-stub": "workspace:*",
-    "@fairhandle/clock-system": "workspace:*"
+    "@fairhandle/clock-system": "workspace:*",
+    "@fairhandle/llm-stub": "workspace:*"
   }
 }
