@@ -1,0 +1,20 @@
+{
+  "name": "@fairhandle/verifier",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/cli.ts",
+  "bin": { "fairhandle": "./bin/fairhandle" },
+  "scripts": { "build": "tsc -b", "test": "vitest run", "typecheck": "tsc -b" },
+  "dependencies": {
+    "@fairhandle/domain": "workspace:*",
+    "@fairhandle/signature-ed25519": "workspace:*",
+    "@fairhandle/storage-git": "workspace:*",
+    "commander": "^12.1.0",
+    "extract-zip": "^2.0.1",
+    "archiver": "^7.0.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3"
+  }
+}

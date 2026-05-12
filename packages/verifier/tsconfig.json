@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "references": [
+    { "path": "../domain" },
+    { "path": "../adapters/signature-ed25519" },
+    { "path": "../adapters/storage-git" }
+  ],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  }
+}
