@@ -43,6 +43,15 @@ importers:
         specifier: workspace:*
         version: link:../../domain
 
+  packages/adapters/identity-keychain:
+    dependencies:
+      '@fairhandle/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@fairhandle/signature-ed25519':
+        specifier: workspace:*
+        version: link:../signature-ed25519
+
   packages/adapters/llm-anthropic:
     dependencies:
       '@anthropic-ai/sdk':
