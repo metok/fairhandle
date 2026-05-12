@@ -51,6 +51,7 @@ export class Room {
   private own_proposal: ConsolidatorOutput | null = null
   private peer_proposal: ConsolidatorOutput | null = null
   private propose_done_by: AgentId | null = null
+  consecutive_disputes = 0
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -189,6 +190,7 @@ export class Room {
 
     let envelope: Envelope
     if (verifyResult.outcome === 'agreed') {
+      this.consecutive_disputes = 0
       const canonical = input.low_node_id === 'A' ? a : b
       this.current_artifact = canonical.artifact
       envelope = {
@@ -209,6 +211,7 @@ export class Room {
         signature: input.signature,
       }
     } else {
+      this.consecutive_disputes++
       envelope = {
         v: 1,
         room_id: this.deps.room_id,
