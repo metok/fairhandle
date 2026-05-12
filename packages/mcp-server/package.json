@@ -17,6 +17,7 @@
     "@fairhandle/clock-system": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "fastify": "^5.1.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0"
   }
 }
