@@ -10,11 +10,16 @@ import type {
 } from '../types/ids.js'
 import type { ClockPort } from '../ports/clock.js'
 import type { SignaturePort } from '../ports/signature.js'
+import type { LLMPort, ConsolidatorOutput } from '../ports/llm.js'
 import type { Envelope, JoinRoomPayload } from '../types/envelope.js'
 import type { Event } from '../types/event.js'
+import type { Artifact } from '../types/artifact.js'
+import type { Message } from '../types/message.js'
 import { MerkleLog } from '../log/merkle-log.js'
 import { validateRoomConfig } from '../types/config.js'
-import { sha256Hex } from '../crypto/hash.js'
+import { sha256Hex, hashCanonical } from '../crypto/hash.js'
+import { runRoundConsolidation } from '../consolidation/orchestrator.js'
+import { verifyStructuralAgreement } from '../consolidation/verifier.js'
 
 export interface AgentParticipant {
   agent_id: AgentId
@@ -42,6 +47,9 @@ export class Room {
   readonly log: MerkleLog
   current_turn_index = 0
   current_round = 0
+  current_artifact: Artifact | null = null
+  private own_proposal: ConsolidatorOutput | null = null
+  private peer_proposal: ConsolidatorOutput | null = null
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -132,6 +140,122 @@ export class Room {
     return [event]
   }
 
+  async runOwnConsolidation(input: {
+    llm: LLMPort
+    our_node_id: 'A' | 'B'
+    signature: SignatureHex
+  }): Promise<Event> {
+    if (this.state !== 'consolidating') {
+      throw new Error(`cannot consolidate: state is ${this.state}`)
+    }
+    const out = await runRoundConsolidation({
+      llm: input.llm,
+      room_config: this.deps.config,
+      previous_artifact: this.current_artifact,
+      transcript_since_last_consolidation: this.lastRoundMessages(),
+    })
+    this.own_proposal = out
+    const proposal_hash = hashCanonical(out) as HashHex
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: this.participantForNodeId(input.our_node_id).agent_id,
+      type: 'consolidation_proposal',
+      payload: {
+        type: 'consolidation_proposal',
+        round_index: this.current_round,
+        ciphertext: JSON.stringify(out),
+        proposal_hash,
+      },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    return this.log.append(envelope, this.deps.clock.nowIso())
+  }
+
+  async attemptMerge(input: {
+    llm: LLMPort
+    low_node_id: 'A' | 'B'
+    signature: SignatureHex
+  }): Promise<Event> {
+    if (this.state !== 'consolidating') throw new Error('not in consolidating')
+    if (!this.own_proposal || !this.peer_proposal) throw new Error('missing proposals')
+    const a = input.low_node_id === 'A' ? this.own_proposal : this.peer_proposal
+    const b = input.low_node_id === 'A' ? this.peer_proposal : this.own_proposal
+    const verifyResult = await verifyStructuralAgreement({ a, b, llm: input.llm, low_node_id: input.low_node_id })
+
+    let envelope: Envelope
+    if (verifyResult.outcome === 'agreed') {
+      const canonical = input.low_node_id === 'A' ? a : b
+      this.current_artifact = canonical.artifact
+      envelope = {
+        v: 1,
+        room_id: this.deps.room_id,
+        agent_id: this.participantForNodeId(input.low_node_id).agent_id,
+        type: 'consolidation_merge',
+        payload: {
+          type: 'consolidation_merge',
+          round_index: this.current_round,
+          canonical_artifact_hash: hashCanonical(canonical.artifact) as HashHex,
+          proposal_hashes: { a: hashCanonical(a) as HashHex, b: hashCanonical(b) as HashHex },
+          canonical_artifact_ciphertext: JSON.stringify(canonical.artifact),
+        },
+        prev_event_hash: this.log.getHeadHash() as HashHex,
+        client_ts: this.deps.clock.nowIso(),
+        nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+        signature: input.signature,
+      }
+    } else {
+      envelope = {
+        v: 1,
+        room_id: this.deps.room_id,
+        agent_id: this.participantForNodeId(input.low_node_id).agent_id,
+        type: 'consolidation_dispute',
+        payload: {
+          type: 'consolidation_dispute',
+          round_index: this.current_round,
+          proposal_hashes: { a: hashCanonical(a) as HashHex, b: hashCanonical(b) as HashHex },
+          disagreement_summary_ciphertext: JSON.stringify(verifyResult.disagreement),
+        },
+        prev_event_hash: this.log.getHeadHash() as HashHex,
+        client_ts: this.deps.clock.nowIso(),
+        nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+        signature: input.signature,
+      }
+    }
+    const event = this.log.append(envelope, this.deps.clock.nowIso())
+    this.advanceAfterConsolidation()
+    return event
+  }
+
+  private advanceAfterConsolidation(): void {
+    this.own_proposal = null
+    this.peer_proposal = null
+    this.current_round++
+    this.state = 'active'
+  }
+
+  private participantForNodeId(node: 'A' | 'B'): AgentParticipant {
+    const idx = node === 'A' ? 0 : 1
+    const p = this.participants[idx]
+    if (!p) throw new Error('participant not seated')
+    return p
+  }
+
+  private lastRoundMessages(): Message[] {
+    const sends = this.log.getEvents()
+      .filter((e) => e.payload.type === 'send_message')
+      .slice(-2)
+    return sends.map((e, i) => ({
+      agent_id: e.payload.agent_id,
+      content: (e.payload.payload as { type: 'send_message'; ciphertext: string }).ciphertext,
+      turn_index: this.current_turn_index - 2 + i,
+      round_index: this.current_round,
+    }))
+  }
+
   async applyRemote(remote: Event): Promise<void> {
     // Re-create the envelope from the remote event payload.
     // Verify chain continuity; do not re-sign — just append the same envelope
@@ -173,6 +297,26 @@ export class Room {
       case 'send_message': {
         this.current_turn_index++
         if (this.current_turn_index % 2 === 0) this.state = 'consolidating'
+        break
+      }
+      case 'consolidation_proposal': {
+        const p = env.payload as { type: 'consolidation_proposal'; ciphertext: string }
+        const parsed = JSON.parse(p.ciphertext) as ConsolidatorOutput
+        // Determine if this is our own or peer's proposal by agent_id.
+        const isOwnAgent = this.participants.some((part) => part.agent_id === env.agent_id && part === this.participants[0])
+        if (this.own_proposal && this.peer_proposal) break // both set
+        if (this.own_proposal === null && isOwnAgent) this.own_proposal = parsed
+        else this.peer_proposal = parsed
+        break
+      }
+      case 'consolidation_merge': {
+        const p = env.payload as { type: 'consolidation_merge'; canonical_artifact_ciphertext: string }
+        this.current_artifact = JSON.parse(p.canonical_artifact_ciphertext) as Artifact
+        this.advanceAfterConsolidation()
+        break
+      }
+      case 'consolidation_dispute': {
+        this.advanceAfterConsolidation()
         break
       }
       default:
