@@ -39,6 +39,8 @@ export class Room {
   state: RoomState = 'waiting'
   readonly participants: AgentParticipant[] = []
   readonly log: MerkleLog
+  current_turn_index = 0
+  current_round = 0
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -88,6 +90,43 @@ export class Room {
     })
     if (this.participants.length === 2) {
       this.state = 'active'
+    }
+    return [event]
+  }
+
+  async handleSend(input: {
+    agent_id: AgentId
+    content_ciphertext: string
+    signature: SignatureHex
+  }): Promise<Event[]> {
+    if (this.state !== 'active') {
+      throw new Error(`cannot send: state is ${this.state}`)
+    }
+    if (this.current_turn_index >= this.deps.config.turn_cap) {
+      throw new Error('turn cap reached')
+    }
+    const expectedAgentIdx = this.current_turn_index % 2
+    const expected = this.participants[expectedAgentIdx]
+    if (!expected) throw new Error('participants not seated')
+    if (expected.agent_id !== input.agent_id) {
+      throw new Error('not your turn')
+    }
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: input.agent_id,
+      type: 'send_message',
+      payload: { type: 'send_message', ciphertext: input.content_ciphertext },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    const event = this.log.append(envelope, this.deps.clock.nowIso())
+    this.current_turn_index++
+    // Round completes after every two turns.
+    if (this.current_turn_index % 2 === 0) {
+      this.state = 'consolidating'
     }
     return [event]
   }
