@@ -24,6 +24,12 @@ importers:
         specifier: workspace:*
         version: link:../../domain
 
+  packages/adapters/llm-stub:
+    dependencies:
+      '@fairhandle/domain':
+        specifier: workspace:*
+        version: link:../../domain
+
   packages/adapters/signature-stub:
     dependencies:
       '@fairhandle/domain':
