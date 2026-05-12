@@ -4,10 +4,15 @@
   "references": [
     { "path": "../domain" },
     { "path": "../adapters/signature-stub" },
+    { "path": "../adapters/signature-ed25519" },
     { "path": "../adapters/channel-memory" },
+    { "path": "../adapters/channel-ws" },
     { "path": "../adapters/storage-memory" },
+    { "path": "../adapters/storage-sqlite" },
     { "path": "../adapters/llm-stub" },
-    { "path": "../adapters/clock-system" }
+    { "path": "../adapters/llm-anthropic" },
+    { "path": "../adapters/clock-system" },
+    { "path": "../adapters/identity-keychain" }
   ],
   "compilerOptions": {
     "rootDir": ".",

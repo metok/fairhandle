@@ -6,14 +6,23 @@
   "main": "./src/run-scenario.ts",
   "scripts": {
     "test": "vitest run",
+    "test:real": "RUN_REAL_LLM=1 vitest run cross-process",
     "typecheck": "tsc -b"
   },
   "dependencies": {
     "@fairhandle/domain": "workspace:*",
     "@fairhandle/signature-stub": "workspace:*",
+    "@fairhandle/signature-ed25519": "workspace:*",
     "@fairhandle/channel-memory": "workspace:*",
+    "@fairhandle/channel-ws": "workspace:*",
     "@fairhandle/storage-memory": "workspace:*",
+    "@fairhandle/storage-sqlite": "workspace:*",
     "@fairhandle/llm-stub": "workspace:*",
-    "@fairhandle/clock-system": "workspace:*"
+    "@fairhandle/llm-anthropic": "workspace:*",
+    "@fairhandle/clock-system": "workspace:*",
+    "@fairhandle/identity-keychain": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
   }
 }

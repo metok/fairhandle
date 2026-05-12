@@ -67,6 +67,8 @@ export class Room {
 
   get room_id(): RoomId { return this.deps.room_id }
   get config(): RoomConfig { return this.deps.config }
+  get proposeDoneBy(): AgentId | null { return this.propose_done_by }
+  get peerProposal(): ConsolidatorOutput | null { return this.peer_proposal }
 
   async handleJoin(input: JoinInput): Promise<Event[]> {
     if (this.state !== 'waiting') {
