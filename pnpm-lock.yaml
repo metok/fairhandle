@@ -18,6 +18,12 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@22.19.19)
 
+  packages/adapters/channel-memory:
+    dependencies:
+      '@fairhandle/domain':
+        specifier: workspace:*
+        version: link:../../domain
+
   packages/adapters/signature-stub:
     dependencies:
       '@fairhandle/domain':
