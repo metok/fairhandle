@@ -1,2 +1,5 @@
 export * from './types/index.js'
 export * from './ports/index.js'
+export * from './log/index.js'
+export * from './crypto/jcs.js'
+export * from './crypto/hash.js'
