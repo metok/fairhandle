@@ -34,6 +34,7 @@ function encode(v: unknown): string {
 }
 
 function numberToCanonical(n: number): string {
+  if (n === 0) return '0'  // handles both 0 and -0 explicitly
   // RFC 8785 §3.2.2.3: integers and floats use ECMAScript ToString
   // semantics, which is what Number.prototype.toString does by default.
   return Number.prototype.toString.call(n)
