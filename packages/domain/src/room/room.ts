@@ -457,11 +457,24 @@ export class Room {
       case 'consolidation_merge': {
         const p = env.payload as { type: 'consolidation_merge'; canonical_artifact_ciphertext: string }
         this.current_artifact = JSON.parse(p.canonical_artifact_ciphertext) as Artifact
+        this.consecutive_disputes = 0
         this.advanceAfterConsolidation()
         break
       }
       case 'consolidation_dispute': {
-        this.advanceAfterConsolidation()
+        this.consecutive_disputes++
+        if (this.consecutive_disputes >= 3) {
+          if (this.config.deadlock_policy === 'best_effort') {
+            this.hard_limit_hit = 'deadlock'
+            this.state = 'closing'
+            break
+          }
+          if (this.config.deadlock_policy === 'escalate_to_humans') {
+            this.state = 'paused'
+            break
+          }
+        }
+        if (this.state === 'consolidating') this.advanceAfterConsolidation()
         break
       }
       case 'propose_done': {
