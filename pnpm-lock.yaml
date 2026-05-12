@@ -48,7 +48,14 @@ importers:
         specifier: workspace:*
         version: link:../../domain
 
-  packages/domain: {}
+  packages/domain:
+    devDependencies:
+      '@fairhandle/clock-system':
+        specifier: workspace:*
+        version: link:../adapters/clock-system
+      '@fairhandle/signature-stub':
+        specifier: workspace:*
+        version: link:../adapters/signature-stub
 
 packages:
 

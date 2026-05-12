@@ -12,5 +12,9 @@
     "build": "tsc -b",
     "test": "vitest run",
     "typecheck": "tsc -b --noEmit"
+  },
+  "devDependencies": {
+    "@fairhandle/signature-stub": "workspace:*",
+    "@fairhandle/clock-system": "workspace:*"
   }
 }
