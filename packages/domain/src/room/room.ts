@@ -50,6 +50,7 @@ export class Room {
   current_artifact: Artifact | null = null
   private own_proposal: ConsolidatorOutput | null = null
   private peer_proposal: ConsolidatorOutput | null = null
+  private propose_done_by: AgentId | null = null
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -244,6 +245,46 @@ export class Room {
     return p
   }
 
+  async handleProposeDone(input: { agent_id: AgentId; reason: string; signature: SignatureHex }): Promise<Event[]> {
+    if (this.state !== 'active') throw new Error(`cannot propose_done: ${this.state}`)
+    if (!this.participants.some((p) => p.agent_id === input.agent_id)) {
+      throw new Error('unknown agent')
+    }
+    this.propose_done_by = input.agent_id
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: input.agent_id,
+      type: 'propose_done',
+      payload: { type: 'propose_done', reason: input.reason },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    return [this.log.append(envelope, this.deps.clock.nowIso())]
+  }
+
+  async handleAcceptDone(input: { agent_id: AgentId; signature: SignatureHex }): Promise<Event[]> {
+    if (this.state !== 'active') throw new Error(`cannot accept_done: ${this.state}`)
+    if (!this.propose_done_by) throw new Error('no propose_done outstanding')
+    if (this.propose_done_by === input.agent_id) throw new Error('cannot accept your own propose_done')
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: input.agent_id,
+      type: 'accept_done',
+      payload: { type: 'accept_done' },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    const ev = this.log.append(envelope, this.deps.clock.nowIso())
+    this.state = 'closing'
+    return [ev]
+  }
+
   private lastRoundMessages(): Message[] {
     const sends = this.log.getEvents()
       .filter((e) => e.payload.type === 'send_message')
@@ -317,6 +358,14 @@ export class Room {
       }
       case 'consolidation_dispute': {
         this.advanceAfterConsolidation()
+        break
+      }
+      case 'propose_done': {
+        this.propose_done_by = env.agent_id
+        break
+      }
+      case 'accept_done': {
+        this.state = 'closing'
         break
       }
       default:
