@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Room, defaultRoomConfig, type RoomId, type ChannelPort } from '@fairhandle/domain'
 import { Ed25519SignatureAdapter } from '@fairhandle/signature-ed25519'
 import { WebSocketServerChannel, WebSocketClientChannel } from '@fairhandle/channel-ws'
 import { SqliteStorageAdapter } from '@fairhandle/storage-sqlite'
+import { StorageGitAdapter } from '@fairhandle/storage-git'
 import { AnthropicLLMAdapter } from '@fairhandle/llm-anthropic'
 import { SystemClock } from '@fairhandle/clock-system'
 
@@ -20,12 +21,16 @@ async function main() {
   const llm = new AnthropicLLMAdapter()
   const tmpDir = mkdtempSync(join(tmpdir(), `fairhandle-${role}-`))
   const storage = new SqliteStorageAdapter(join(tmpDir, 'chain.db'))
+  const gitDir = join(tmpDir, 'artifact.git')
+  const artifactHistory = new StorageGitAdapter({ dir: gitDir })
+  await artifactHistory.init()
 
   const room = await Room.create({
     room_id: room_id as RoomId,
     config: defaultRoomConfig(),
     signature: sig,
     clock,
+    artifact_history: artifactHistory,
   })
 
   let channel: ChannelPort
@@ -129,7 +134,10 @@ async function main() {
   }
   await waitFor(() => room.state === 'closing', 30_000, 'never reached closing')
   await room.finalize()
-  console.log(JSON.stringify({ role, status: 'done', head: room.log.getHeadHash() }))
+  const chainPath = join(tmpDir, 'chain.json')
+  const events = await storage.getEvents(room_id as RoomId)
+  writeFileSync(chainPath, JSON.stringify({ room_id, events }))
+  console.log(JSON.stringify({ role, status: 'done', head: room.log.getHeadHash(), tmpDir, chainPath, gitDir }))
   await channel.close()
   storage.close()
 }

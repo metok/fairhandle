@@ -12,7 +12,9 @@
     { "path": "../adapters/llm-stub" },
     { "path": "../adapters/llm-anthropic" },
     { "path": "../adapters/clock-system" },
-    { "path": "../adapters/identity-keychain" }
+    { "path": "../adapters/identity-keychain" },
+    { "path": "../adapters/storage-git" },
+    { "path": "../verifier" }
   ],
   "compilerOptions": {
     "rootDir": ".",

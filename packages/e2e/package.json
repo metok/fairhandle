@@ -20,7 +20,9 @@
     "@fairhandle/llm-stub": "workspace:*",
     "@fairhandle/llm-anthropic": "workspace:*",
     "@fairhandle/clock-system": "workspace:*",
-    "@fairhandle/identity-keychain": "workspace:*"
+    "@fairhandle/identity-keychain": "workspace:*",
+    "@fairhandle/storage-git": "workspace:*",
+    "@fairhandle/verifier": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

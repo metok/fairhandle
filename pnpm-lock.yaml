@@ -170,12 +170,18 @@ importers:
       '@fairhandle/signature-stub':
         specifier: workspace:*
         version: link:../adapters/signature-stub
+      '@fairhandle/storage-git':
+        specifier: workspace:*
+        version: link:../adapters/storage-git
       '@fairhandle/storage-memory':
         specifier: workspace:*
         version: link:../adapters/storage-memory
       '@fairhandle/storage-sqlite':
         specifier: workspace:*
         version: link:../adapters/storage-sqlite
+      '@fairhandle/verifier':
+        specifier: workspace:*
+        version: link:../verifier
     devDependencies:
       tsx:
         specifier: ^4.19.0

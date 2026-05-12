@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import { verifyBundle } from '@fairhandle/verifier'
 
 const enabled = process.env.RUN_REAL_LLM === '1'
 
@@ -45,10 +46,22 @@ describe.skipIf(!enabled)('E2E cross-process (real LLM, real transport)', () => 
 
     const lastLineA = aOut.trim().split('\n').at(-1)!
     const lastLineB = bOut.trim().split('\n').at(-1)!
-    const a = JSON.parse(lastLineA) as { status: string; head: string }
-    const b = JSON.parse(lastLineB) as { status: string; head: string }
+    const a = JSON.parse(lastLineA) as { status: string; head: string; tmpDir: string; gitDir: string }
+    const b = JSON.parse(lastLineB) as { status: string; head: string; tmpDir: string; gitDir: string }
     expect(a.status).toBe('done')
     expect(b.status).toBe('done')
     expect(a.head).toBe(b.head)
+
+    // Each peer's gitDir should contain at least one commit on main (assuming the round merged).
+    // If the LLM-driven consolidation produced a dispute, gitDir will be empty — that's still
+    // a valid run; only assert when at least one merge happened.
+    for (const peer of [a, b]) {
+      const log = spawnSync('git', ['-C', peer.gitDir, 'log', '--oneline'], { encoding: 'utf8' })
+      if (log.status === 0 && log.stdout.split('\n').filter(Boolean).length > 0) {
+        // Trailer should reference a real chain event hash.
+        const report = await verifyBundle(peer.tmpDir)
+        expect(report.ok).toBe(true)
+      }
+    }
   }, 180_000)
 })
