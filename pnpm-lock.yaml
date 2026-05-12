@@ -18,6 +18,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@22.19.19)
 
+  packages/domain: {}
+
 packages:
 
   '@esbuild/aix-ppc64@0.21.5':
