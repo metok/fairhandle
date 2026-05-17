@@ -20,22 +20,59 @@
 3. Replace `ABSOLUTE_PATH_TO_NODE` with the absolute path to your `node` binary. **This matters:** Claude Desktop launches MCP servers with a minimal `PATH` that does NOT include Homebrew or nvm directories, so a bare `"node"` fails with "Server disconnected". Find your node path with `which node` (commonly `/opt/homebrew/bin/node` on Apple Silicon, `/usr/local/bin/node` on Intel macs, or an nvm path).
 4. Quit and restart Claude Desktop. You should see `fairhandle-peer-a` and `fairhandle-peer-b` listed under the MCP servers indicator.
 
-## Run a negotiation
+## Run a negotiation — worked example
 
-1. **Tab 1 (Alice):** Brief your Claude:
-   > "You are Alice negotiating a SaaS contract. Your priorities: 30-day payment terms, 12-month commitment, no exclusivity. Walk-away thresholds: anything below 60-day terms or auto-renewal. Use the fairhandle-peer-a MCP tools to create a room and represent me. Call create_room first."
-2. Claude calls `create_room`. It returns an invite code.
-3. **Tab 2 (Bob):** Brief your other Claude, pasting the invite code:
-   > "You are Bob, a SaaS vendor. Your priorities: 14-day payment, 24-month commitment, exclusivity in our category. Walk-away thresholds: anything above 45-day terms. Use the fairhandle-peer-b tools to join this invite code: <paste>"
-4. Both Claudes call `send_message` alternately. After each round, the system auto-runs a consolidation (you'll see the `current_round` counter go up via `get_room_state`).
-5. When one Claude believes alignment is reached it calls `propose_done`; the other calls `accept_done`.
+**Scenario:** Alice, a small bakery owner, is hiring Bob, a freelance designer, to create a
+logo. Four negotiable terms (fee, revision rounds, deadline, usage rights) with a real overlap
+zone, so they reach a deal in one or two rounds.
 
-## Watch the negotiation live (Plan 6, forthcoming)
+### Tab 1 — Alice (paste into the `fairhandle-peer-a` Claude)
 
-- Peer A's HTTP endpoint: `http://localhost:5173/api/rooms`
-- Peer B's HTTP endpoint: `http://localhost:5174/api/rooms`
+> You are Alice, owner of a small neighbourhood bakery. You are hiring a freelance designer to
+> create a logo. You are negotiating on my behalf via the fairhandle-peer-a MCP tools.
+>
+> **Your targets:** budget EUR 600, 3 revision rounds included, delivery within 3 weeks, and
+> full ownership of the logo (all rights transferred to you).
+>
+> **Your walk-away thresholds:** do not go above EUR 900, do not accept fewer than 2 revision
+> rounds, do not accept a deadline longer than 5 weeks, and you must get commercial usage
+> rights at minimum.
+>
+> **Instructions:** Call `create_room` first (role_label "Alice"). It returns an invite code —
+> show me that code so I can pass it to the designer. Then negotiate by calling `send_message`
+> when it is your turn. Open by stating your terms. Be friendly but firm. When all four terms
+> are agreed, call `propose_done`.
 
-Plan 6 adds a browser UI on top of these endpoints.
+### Tab 2 — Bob (paste into the `fairhandle-peer-b` Claude)
+
+> You are Bob, a freelance logo designer. A bakery owner wants to hire you. You are negotiating
+> on my behalf via the fairhandle-peer-b MCP tools.
+>
+> **Your targets:** fee EUR 1000, 2 revision rounds included (extras billed separately),
+> delivery in 4 weeks, and you keep portfolio/display rights (client gets commercial use, you
+> keep the right to show the work in your portfolio).
+>
+> **Your walk-away thresholds:** do not accept a fee below EUR 500, do not commit to more than
+> 4 revision rounds, do not accept a deadline shorter than 2 weeks, and you will not give up
+> portfolio display rights.
+>
+> **Instructions:** Join the room by calling `join_room` with the invite code Alice's Claude
+> produced, and role_label "Bob". Then negotiate by calling `send_message` when it is your
+> turn. Respond to Alice's opening with your counter. Be professional and willing to
+> compromise. Once all four terms are agreed and Alice has proposed closing, call `accept_done`.
+
+After each round the system auto-runs a consolidation; watch `current_round` climb via
+`get_room_state`. To force a walk-away instead of a deal, raise Bob's fee floor to EUR 950 —
+that removes the overlap.
+
+## Watch the negotiation live
+
+Each MCP server exposes a local read-only HTTP endpoint:
+
+- Peer A: `http://localhost:5173/api/rooms`
+- Peer B: `http://localhost:5174/api/rooms`
+
+A browser UI on top of these endpoints is in progress.
 
 ## Troubleshooting
 
