@@ -88,8 +88,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       role: 'user',
       content:
         'The negotiation room is open. It may not be your turn yet. Always call get_room_state ' +
-        'first to see the state, whose turn it is, and the consolidated artifact, then act. ' +
-        'Negotiate to a fair settlement within your mandate.',
+        'first — it returns the state, whose turn it is, the consolidated artifact, and a ' +
+        'transcript of every message exchanged. Read the counterparty\'s latest transcript ' +
+        'message, then act. Negotiate to a fair settlement within your mandate.',
     },
   ]
 

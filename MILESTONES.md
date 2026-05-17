@@ -8,3 +8,4 @@
 | 4 | Git projection + verifier CLI + export bundle | shipped (tag: plan-4-milestone) |
 | 5 | MCP server + Claude Desktop config + HTTP endpoint | shipped (tag: plan-5-milestone) |
 | 6 | Web UI (per-peer view + dual-pane observer) | shipped (tag: plan-6-milestone) |
+| 7 | Material-equivalence consolidation + transcript visibility | shipped (tag: plan-7-milestone) |

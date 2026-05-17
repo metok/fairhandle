@@ -34,11 +34,18 @@ logo designer, four terms with a real overlap zone. Add scenarios under
 
 ## Known finding
 
-Early runs surface a real architectural issue: each MCP server runs its **own
-independent** Anthropic consolidator, and two independent LLM consolidations
-rarely produce byte-identical structural output, so most rounds register a
-structural dispute and negotiations tend to `deadlock` after three. This is the
-canonical-consolidator problem described in `spec/` §3.7 — the protocol's design
-answer is a single shared (TEE-attested or canonical-service) consolidator rather
-than two independent ones. Until that lands, the bakery scenario's pass-rate is
-low by design — the eval is correctly reporting a systemic gap, not noise.
+The eval drove a real architectural change. Originally each MCP server ran its
+own consolidator and rounds were checked for *structural identity* — two
+independent LLM consolidations never match structurally, so every round disputed
+and negotiations always deadlocked.
+
+Plan 7 replaced that with **material-equivalence** checking (an LLM judges whether
+the two artifacts capture the same terms, ignoring wording/structure). This
+unblocked deals — a full bakery negotiation now consolidates and closes as a deal
+(`pnpm --filter @fairhandle/eval demo` shows it end-to-end).
+
+It is not yet *reliable*: two independent consolidators plus a stochastic
+equivalence-judge still diverge on some rounds, so the bakery pass-rate is
+variable. The reliable fix — a single canonical "producer + auditor" consolidator
+(one peer consolidates, the other audits faithfulness rather than re-deriving) —
+is the next architectural step, aligned with `spec/` §3.7.
