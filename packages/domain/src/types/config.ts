@@ -13,6 +13,8 @@ export interface RoomConfig {
   opening_artifact: string | null
   /** If set, the joining peer's pubkey must match. */
   expected_peer_pubkey: Pubkey | null
+  /** If set, the room expects a mediator with this pubkey to join. */
+  mediator_pubkey: Pubkey | null
 }
 
 export function defaultRoomConfig(): RoomConfig {
@@ -22,6 +24,7 @@ export function defaultRoomConfig(): RoomConfig {
     deadlock_policy: 'best_effort',
     opening_artifact: null,
     expected_peer_pubkey: null,
+    mediator_pubkey: null,
   }
 }
 

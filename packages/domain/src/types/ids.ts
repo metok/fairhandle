@@ -30,6 +30,8 @@ export type RoomState =
   | 'closing'
   | 'closed'
 
+export type ParticipantRole = 'peer' | 'mediator'
+
 export type Pubkey = string & { readonly __brand: 'Pubkey' }
 export type SignatureHex = string & { readonly __brand: 'SignatureHex' }
 export type HashHex = string & { readonly __brand: 'HashHex' }

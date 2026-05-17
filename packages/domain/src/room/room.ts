@@ -6,6 +6,7 @@ import type {
   SignatureHex,
   HashHex,
   AgentId,
+  ParticipantRole,
 } from '../types/ids.js'
 import type { RoomConfig } from '../types/config.js'
 import type { ClockPort } from '../ports/clock.js'
@@ -27,6 +28,7 @@ export interface AgentParticipant {
   role_label: string
   pubkey: Pubkey
   joined_at_event: number
+  role: ParticipantRole
 }
 
 export interface RoomDeps {
@@ -105,6 +107,7 @@ export class Room {
       role_label: input.role_label,
       pubkey: input.pubkey,
       joined_at_event: event.index,
+      role: 'peer',
     })
     if (this.participants.length === 2) {
       this.state = 'active'
@@ -137,7 +140,7 @@ export class Room {
       throw new Error('turn cap reached')
     }
     const expectedAgentIdx = this.current_turn_index % 2
-    const expected = this.participants[expectedAgentIdx]
+    const expected = this.peers()[expectedAgentIdx]
     if (!expected) throw new Error('participants not seated')
     if (expected.agent_id !== input.agent_id) {
       throw new Error('not your turn')
@@ -317,9 +320,13 @@ export class Room {
     }
   }
 
+  private peers(): AgentParticipant[] {
+    return this.participants.filter((p) => p.role === 'peer')
+  }
+
   private participantForNodeId(node: 'A' | 'B'): AgentParticipant {
     const idx = node === 'A' ? 0 : 1
-    const p = this.participants[idx]
+    const p = this.peers()[idx]
     if (!p) throw new Error('participant not seated')
     return p
   }
@@ -462,6 +469,7 @@ export class Room {
           role_label: payload.role_label,
           pubkey: '' as Pubkey, // remote: not known to us locally; left blank in Plan 1 stub
           joined_at_event: last.index,
+          role: 'peer',
         })
         if (this.participants.length === 2) {
           this.state = 'active'

@@ -7,7 +7,7 @@ describe.skipIf(!enabled)('AnthropicLLMAdapter (real)', () => {
   it('consolidates a tiny transcript', async () => {
     const llm = new AnthropicLLMAdapter()
     const out = await llm.runConsolidator({
-      room_config: { turn_cap: 50, time_cap_ms: 60_000, deadlock_policy: 'best_effort', opening_artifact: null, expected_peer_pubkey: null },
+      room_config: { turn_cap: 50, time_cap_ms: 60_000, deadlock_policy: 'best_effort', opening_artifact: null, expected_peer_pubkey: null, mediator_pubkey: null },
       previous_artifact: null,
       transcript_since_last_consolidation: [
         { agent_id: 'a' as never, content: 'I propose 30-day net payment terms.', turn_index: 0, round_index: 0 },

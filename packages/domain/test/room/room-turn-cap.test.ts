@@ -19,7 +19,7 @@ describe('Hard limit — turn_cap', () => {
     })
     const room = await Room.create({
       room_id: ROOM,
-      config: { turn_cap: 2, time_cap_ms: 60_000, deadlock_policy: 'best_effort', opening_artifact: null, expected_peer_pubkey: null },
+      config: { turn_cap: 2, time_cap_ms: 60_000, deadlock_policy: 'best_effort', opening_artifact: null, expected_peer_pubkey: null, mediator_pubkey: null },
       signature: sig,
       clock,
     })

@@ -11,7 +11,7 @@ describe('Hard limit — time_cap', () => {
     const clock = new FixedClock(new Date('2026-05-12T00:00:00Z'))
     const room = await Room.create({
       room_id: ROOM,
-      config: { turn_cap: 50, time_cap_ms: 5000, deadlock_policy: 'best_effort', opening_artifact: null, expected_peer_pubkey: null },
+      config: { turn_cap: 50, time_cap_ms: 5000, deadlock_policy: 'best_effort', opening_artifact: null, expected_peer_pubkey: null, mediator_pubkey: null },
       signature: sig,
       clock,
     })
