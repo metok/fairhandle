@@ -1,0 +1,64 @@
+import type { Scenario } from '../scenario.js'
+
+/**
+ * Bakery logo-design negotiation. Four terms — fee, revision rounds, deadline,
+ * usage rights — with a deliberately real overlap zone, so a competent pair of
+ * agents should reach a deal within one or two rounds.
+ */
+export const bakeryScenario: Scenario = {
+  id: 'bakery-logo',
+  title: 'Bakery owner hires a freelance logo designer',
+  briefA: [
+    'You are Alice, owner of a small neighbourhood bakery, hiring a freelance designer to',
+    'create a logo. You are negotiating on the bakery owner\'s behalf.',
+    '',
+    'Your targets: budget EUR 600, 3 revision rounds included, delivery within 3 weeks,',
+    'and full ownership of the logo (all rights transferred to you).',
+    '',
+    'Your walk-away thresholds: do NOT go above EUR 900, do NOT accept fewer than 2',
+    'revision rounds, do NOT accept a deadline longer than 5 weeks, and you must get',
+    'commercial usage rights at minimum.',
+    '',
+    'Negotiate by calling send_message when it is your turn. Open by stating your terms.',
+    'Be friendly but firm, and move decisively toward a fair middle — concede where you',
+    'can; you do not need to hit your targets, only stay inside your walk-away thresholds.',
+    'After every round the system consolidates the agreed draft — inspect it with',
+    'get_room_state. Aim to settle all four terms within two or three rounds. As soon as',
+    'the consolidated artifact shows all four terms at values inside your acceptable',
+    'range, stop negotiating and call propose_done. Do not keep haggling once a workable',
+    'deal is on the table. Only call leave_room if the counterparty is firmly past your',
+    'walk-away thresholds and will not move.',
+  ].join('\n'),
+  briefB: [
+    'You are Bob, a freelance logo designer. A bakery owner wants to hire you. You are',
+    'negotiating on the designer\'s behalf.',
+    '',
+    'Your targets: fee EUR 1000, 2 revision rounds included (extras billed separately),',
+    'delivery in 4 weeks, and you keep portfolio/display rights (the client gets full',
+    'commercial use, you keep the right to show the work in your portfolio).',
+    '',
+    'Your walk-away thresholds: do NOT accept a fee below EUR 500, do NOT commit to more',
+    'than 4 revision rounds, do NOT accept a deadline shorter than 2 weeks, and you will',
+    'not give up portfolio display rights.',
+    '',
+    'Negotiate by calling send_message when it is your turn. Respond to Alice\'s opening',
+    'with a counter. Be professional and compromise decisively toward a fair middle —',
+    'concede where you can; you do not need to hit your targets, only stay inside your',
+    'walk-away thresholds. After every round the system consolidates the agreed draft —',
+    'inspect it with get_room_state. Aim to settle all four terms within two or three',
+    'rounds. Once the consolidated artifact shows all four terms inside your acceptable',
+    'range and Alice has called propose_done, call accept_done promptly. Only call',
+    'leave_room if Alice is firmly past your walk-away thresholds and will not move.',
+  ].join('\n'),
+  expected: {
+    outcome: 'deal',
+    overlapSpec: [
+      'A correct deal settles all four terms inside these zones:',
+      '- Fee: between EUR 500 and EUR 900 (inclusive).',
+      '- Revision rounds: between 2 and 4 (inclusive).',
+      '- Delivery deadline: between 2 and 5 weeks (inclusive).',
+      '- Usage rights: the client (bakery) gets at least commercial usage rights, AND',
+      '  the designer keeps the right to display the work in a portfolio.',
+    ].join('\n'),
+  },
+}

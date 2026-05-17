@@ -1,0 +1,21 @@
+{
+  "name": "@fairhandle/eval",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": { "fairhandle-eval": "./bin/fairhandle-eval" },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "eval": "node ./bin/fairhandle-eval"
+  },
+  "dependencies": {
+    "@fairhandle/mcp-server": "workspace:*",
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0"
+  }
+}
