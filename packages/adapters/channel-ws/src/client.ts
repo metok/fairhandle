@@ -4,6 +4,8 @@ import type { ChannelPort, Envelope } from '@fairhandle/domain'
 export class WebSocketClientChannel implements ChannelPort {
   private ws: WebSocket
   private handlers = new Set<(env: Envelope) => void>()
+  /** Envelopes received before any handler was registered. Flushed on first onReceive. */
+  private inbound: Envelope[] = []
   private ready: Promise<void>
 
   constructor(url: string) {
@@ -15,7 +17,13 @@ export class WebSocketClientChannel implements ChannelPort {
     this.ws.on('message', (data) => {
       try {
         const env: Envelope = JSON.parse(data.toString())
-        for (const h of this.handlers) h(env)
+        if (this.handlers.size === 0) {
+          // No handler yet — the consumer registers onReceive after connect()
+          // and possibly after async setup. Buffer so nothing is dropped.
+          this.inbound.push(env)
+        } else {
+          for (const h of this.handlers) h(env)
+        }
       } catch {
         // bad frame; ignore
       }
@@ -31,6 +39,11 @@ export class WebSocketClientChannel implements ChannelPort {
 
   onReceive(handler: (env: Envelope) => void): () => void {
     this.handlers.add(handler)
+    if (this.inbound.length > 0) {
+      const buffered = this.inbound
+      this.inbound = []
+      for (const env of buffered) handler(env)
+    }
     return () => { this.handlers.delete(handler) }
   }
 
