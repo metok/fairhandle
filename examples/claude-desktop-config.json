@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "fairhandle-peer-a": {
-      "command": "node",
+      "command": "ABSOLUTE_PATH_TO_NODE",
       "args": [
         "ABSOLUTE_PATH_TO/fairhandle/packages/mcp-server/bin/fairhandle-mcp"
       ],
@@ -11,7 +11,7 @@
       }
     },
     "fairhandle-peer-b": {
-      "command": "node",
+      "command": "ABSOLUTE_PATH_TO_NODE",
       "args": [
         "ABSOLUTE_PATH_TO/fairhandle/packages/mcp-server/bin/fairhandle-mcp"
       ],
