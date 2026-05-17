@@ -9,7 +9,8 @@
     "build": "tsc -b",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "eval": "node ./bin/fairhandle-eval"
+    "eval": "node ./bin/fairhandle-eval",
+    "demo": "node --import tsx ./src/demo.ts"
   },
   "dependencies": {
     "@fairhandle/mcp-server": "workspace:*",
