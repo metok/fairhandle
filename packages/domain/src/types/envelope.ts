@@ -2,6 +2,7 @@ import type { AgentId, RoomId, SignatureHex, HashHex } from './ids.js'
 
 export type EnvelopeType =
   | 'join_room'
+  | 'mediator_join'
   | 'send_message'
   | 'consolidation_proposal'
   | 'consolidation_merge'
@@ -14,6 +15,10 @@ export type EnvelopeType =
 export interface JoinRoomPayload {
   type: 'join_room'
   role_label: string
+}
+
+export interface MediatorJoinPayload {
+  type: 'mediator_join'
 }
 
 export interface SendMessagePayload {
@@ -69,6 +74,7 @@ export interface FinalArtifactSignPayload {
 
 export type EnvelopePayload =
   | JoinRoomPayload
+  | MediatorJoinPayload
   | SendMessagePayload
   | ConsolidationProposalPayload
   | ConsolidationMergePayload

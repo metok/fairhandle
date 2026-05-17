@@ -13,7 +13,7 @@ import type { ClockPort } from '../ports/clock.js'
 import type { SignaturePort } from '../ports/signature.js'
 import type { LLMPort, ConsolidatorOutput } from '../ports/llm.js'
 import type { ArtifactHistoryPort } from '../ports/artifact-history.js'
-import type { Envelope, JoinRoomPayload } from '../types/envelope.js'
+import type { Envelope, JoinRoomPayload, MediatorJoinPayload } from '../types/envelope.js'
 import type { Event } from '../types/event.js'
 import type { Artifact } from '../types/artifact.js'
 import type { Message } from '../types/message.js'
@@ -78,10 +78,10 @@ export class Room {
     if (this.state !== 'waiting') {
       throw new Error(`cannot join: state is ${this.state}`)
     }
-    if (this.participants.length >= 2) {
+    if (this.peers().length >= 2) {
       throw new Error('room is full')
     }
-    if (this.deps.config.expected_peer_pubkey && this.participants.length === 1) {
+    if (this.deps.config.expected_peer_pubkey && this.peers().length === 1) {
       if (input.pubkey !== this.deps.config.expected_peer_pubkey) {
         throw new Error('joiner pubkey does not match expected_peer_pubkey')
       }
@@ -109,10 +109,44 @@ export class Room {
       joined_at_event: event.index,
       role: 'peer',
     })
-    if (this.participants.length === 2) {
-      this.state = 'active'
-      this.active_started_at_ms = this.deps.clock.nowMs()
+    this.activateIfReady()
+    return [event]
+  }
+
+  async handleMediatorJoin(input: { pubkey: Pubkey; signature: SignatureHex }): Promise<Event[]> {
+    if (this.state !== 'waiting') {
+      throw new Error(`cannot join as mediator: state is ${this.state}`)
     }
+    if (this.deps.config.mediator_pubkey === null) {
+      throw new Error('no mediator expected for this room')
+    }
+    if (input.pubkey !== this.deps.config.mediator_pubkey) {
+      throw new Error(`pubkey mismatch: expected ${this.deps.config.mediator_pubkey}`)
+    }
+    if (this.participants.some((p) => p.role === 'mediator')) {
+      throw new Error('mediator already joined')
+    }
+    const agent_id = randomUUID() as AgentId
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id,
+      type: 'mediator_join',
+      payload: { type: 'mediator_join' } as MediatorJoinPayload,
+      prev_event_hash: (this.log.getHeadHash() ?? '') as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    const event = this.log.append(envelope, this.deps.clock.nowIso())
+    this.participants.push({
+      agent_id,
+      role_label: 'Mediator',
+      pubkey: input.pubkey,
+      joined_at_event: event.index,
+      role: 'mediator',
+    })
+    this.activateIfReady()
     return [event]
   }
 
@@ -320,6 +354,15 @@ export class Room {
     }
   }
 
+  private activateIfReady(): void {
+    if (this.state !== 'waiting') return
+    if (this.peers().length !== 2) return
+    const mediatorRequired = this.deps.config.mediator_pubkey !== null
+    if (mediatorRequired && !this.participants.some((p) => p.role === 'mediator')) return
+    this.state = 'active'
+    this.active_started_at_ms = this.deps.clock.nowMs()
+  }
+
   private peers(): AgentParticipant[] {
     return this.participants.filter((p) => p.role === 'peer')
   }
@@ -471,10 +514,20 @@ export class Room {
           joined_at_event: last.index,
           role: 'peer',
         })
-        if (this.participants.length === 2) {
-          this.state = 'active'
-          this.active_started_at_ms = this.deps.clock.nowMs()
-        }
+        this.activateIfReady()
+        break
+      }
+      case 'mediator_join': {
+        const last = this.log.getHead()!
+        if (this.participants.some((p) => p.agent_id === env.agent_id)) return
+        this.participants.push({
+          agent_id: env.agent_id,
+          role_label: 'Mediator',
+          pubkey: this.deps.config.mediator_pubkey ?? ('' as Pubkey),
+          joined_at_event: last.index,
+          role: 'mediator',
+        })
+        this.activateIfReady()
         break
       }
       case 'send_message': {
