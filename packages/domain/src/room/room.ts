@@ -385,6 +385,7 @@ export class Room {
   private advanceAfterConsolidation(): void {
     this.own_proposal = null
     this.peer_proposal = null
+    this.pending_consolidation = null
     this.current_round++
     if (this.current_turn_index >= this.config.turn_cap) {
       this.hard_limit_hit = 'turn_cap'
@@ -586,7 +587,6 @@ export class Room {
           this.pending_consolidation = parsed
           break
         }
-        // Plan-7 peer-authored proposal: assign to own_proposal / peer_proposal.
         const isOwnAgent = this.participants.some((part) => part.agent_id === env.agent_id && part === this.peers()[0])
         if (this.own_proposal && this.peer_proposal) break // both set
         if (this.own_proposal === null && isOwnAgent) this.own_proposal = parsed

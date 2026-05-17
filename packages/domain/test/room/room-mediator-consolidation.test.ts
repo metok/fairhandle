@@ -50,7 +50,7 @@ async function driveToConsolidating(room: Room) {
 }
 
 describe('Room — runMediatorConsolidation (Task 4)', () => {
-  it('appends exactly one consolidation_proposal signed by the mediator and sets pending_consolidation', async () => {
+  it('appends a consolidation_proposal signed by the mediator and sets pending_consolidation', async () => {
     const { room, llm } = await makeMediatorRoom()
     await driveToConsolidating(room)
     expect(room.state).toBe('consolidating')
