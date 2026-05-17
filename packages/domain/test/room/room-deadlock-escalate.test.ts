@@ -24,6 +24,7 @@ async function reachThirdDispute(policy: 'best_effort' | 'escalate_to_humans') {
       divergent(3, 'agreed'), divergent(3, 'open'),
     ],
     verifierAlways: { equivalent: true },
+    artifactEquivalence: { equivalent: false, divergences: ['scripted dispute'] },
   })
   const room = await Room.create({ room_id: ROOM, config: { ...defaultRoomConfig(), deadlock_policy: policy }, signature: sig, clock })
   const a = await sig.generateEphemeralKeyPair()

@@ -11,12 +11,17 @@ import type {
 export interface ScriptedLLMConfig {
   consolidatorOutputs: ConsolidatorOutput[]
   verifierAlways: VerifierOutput
-  /** Verdict returned by verifyArtifactEquivalence. Defaults to equivalent. */
-  artifactEquivalence?: ArtifactEquivalenceOutput
+  /**
+   * Verdict returned by verifyArtifactEquivalence. A single value is used for
+   * every call; an array is consumed per call (the last entry repeats once
+   * exhausted). Defaults to equivalent.
+   */
+  artifactEquivalence?: ArtifactEquivalenceOutput | ArtifactEquivalenceOutput[]
 }
 
 export class ScriptedLLMAdapter implements LLMPort {
   private idx = 0
+  private eqIdx = 0
   constructor(private readonly cfg: ScriptedLLMConfig) {}
 
   async runConsolidator(_input: ConsolidatorInput): Promise<ConsolidatorOutput> {
@@ -34,6 +39,13 @@ export class ScriptedLLMAdapter implements LLMPort {
   async verifyArtifactEquivalence(
     _input: ArtifactEquivalenceInput,
   ): Promise<ArtifactEquivalenceOutput> {
-    return structuredClone(this.cfg.artifactEquivalence ?? { equivalent: true, divergences: [] })
+    const cfg = this.cfg.artifactEquivalence
+    const fallback: ArtifactEquivalenceOutput = { equivalent: true, divergences: [] }
+    if (Array.isArray(cfg)) {
+      const v = cfg.length === 0 ? fallback : cfg[Math.min(this.eqIdx, cfg.length - 1)]!
+      this.eqIdx++
+      return structuredClone(v)
+    }
+    return structuredClone(cfg ?? fallback)
   }
 }

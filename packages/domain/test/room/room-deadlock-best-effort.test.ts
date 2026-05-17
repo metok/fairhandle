@@ -30,6 +30,7 @@ describe('Deadlock — best_effort policy', () => {
         divergent(3, 'agreed'), divergent(3, 'open'),
       ],
       verifierAlways: { equivalent: true },
+      artifactEquivalence: { equivalent: false, divergences: ['scripted dispute'] },
     })
     const room = await Room.create({
       room_id: ROOM,

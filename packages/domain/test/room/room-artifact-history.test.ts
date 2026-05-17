@@ -65,7 +65,11 @@ describe('Room — ArtifactHistoryPort wiring', () => {
 
     const sig = new StubSignatureAdapter()
     const clock = new FixedClock(new Date('2026-05-12T00:00:00Z'))
-    const llm = new ScriptedLLMAdapter({ consolidatorOutputs: [sameOutput()], verifierAlways: { equivalent: true } })
+    const llm = new ScriptedLLMAdapter({
+      consolidatorOutputs: [sameOutput()],
+      verifierAlways: { equivalent: true },
+      artifactEquivalence: { equivalent: false, divergences: ['scripted dispute'] },
+    })
     const room = await Room.create({
       room_id: ROOM,
       config: defaultRoomConfig(),
@@ -82,7 +86,7 @@ describe('Room — ArtifactHistoryPort wiring', () => {
     await room.handleSend({ agent_id: aId, content_ciphertext: 'a', signature: 's' as never })
     await room.handleSend({ agent_id: bId, content_ciphertext: 'b', signature: 's' as never })
     await room.runOwnConsolidation({ llm, our_node_id: 'A', signature: 's' as never })
-    // Stuff a divergent peer proposal (different open_issues) to force a dispute.
+    // Stuff a divergent peer proposal to force a dispute.
     ;(room as unknown as { peer_proposal: unknown }).peer_proposal = {
       artifact: { markdown: 'doc', version: 1, overlay: [], open_issues: ['differ'], changelog: 'c' },
       open_issues: ['differ'],

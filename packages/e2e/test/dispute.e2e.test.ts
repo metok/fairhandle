@@ -27,8 +27,9 @@ describe('E2E dispute', () => {
   it('logs ConsolidationDisputed on both peers and continues with next round', async () => {
     const sig = new StubSignatureAdapter()
     const clock = new FixedClock(new Date('2026-05-12T00:00:00Z'))
-    const llmA = new ScriptedLLMAdapter({ consolidatorOutputs: [divergent(1, 'agreed'), agreed(2)], verifierAlways: { equivalent: true } })
-    const llmB = new ScriptedLLMAdapter({ consolidatorOutputs: [divergent(1, 'open'), agreed(2)], verifierAlways: { equivalent: true } })
+    const dispute = { equivalent: false, divergences: ['scripted dispute'] }
+    const llmA = new ScriptedLLMAdapter({ consolidatorOutputs: [divergent(1, 'agreed'), agreed(2)], verifierAlways: { equivalent: true }, artifactEquivalence: dispute })
+    const llmB = new ScriptedLLMAdapter({ consolidatorOutputs: [divergent(1, 'open'), agreed(2)], verifierAlways: { equivalent: true }, artifactEquivalence: dispute })
 
     const roomA = await Room.create({ room_id: ROOM, config: defaultRoomConfig(), signature: sig, clock })
     const roomB = await Room.create({ room_id: ROOM, config: defaultRoomConfig(), signature: sig, clock })

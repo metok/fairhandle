@@ -47,6 +47,12 @@ describe('Room — consecutive disputes counter', () => {
         divergentOutput(3, 'agreed'),  // merge (resets counter)
       ],
       verifierAlways: { equivalent: true },
+      // round 1 + 2 dispute, round 3 merges
+      artifactEquivalence: [
+        { equivalent: false, divergences: ['scripted dispute'] },
+        { equivalent: false, divergences: ['scripted dispute'] },
+        { equivalent: true, divergences: [] },
+      ],
     })
     const room = await Room.create({ room_id: ROOM, config: defaultRoomConfig(), signature: sig, clock })
     const a = await sig.generateEphemeralKeyPair()

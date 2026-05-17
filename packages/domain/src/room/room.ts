@@ -20,7 +20,7 @@ import { MerkleLog } from '../log/merkle-log.js'
 import { validateRoomConfig } from '../types/config.js'
 import { sha256Hex, hashCanonical, chainEventHash } from '../crypto/hash.js'
 import { runRoundConsolidation } from '../consolidation/orchestrator.js'
-import { verifyStructuralAgreement } from '../consolidation/verifier.js'
+import { verifyConsolidationAgreement } from '../consolidation/verifier.js'
 
 export interface AgentParticipant {
   agent_id: AgentId
@@ -208,7 +208,14 @@ export class Room {
     if (!this.own_proposal || !this.peer_proposal) throw new Error('missing proposals')
     const a = input.low_node_id === 'A' ? this.own_proposal : this.peer_proposal
     const b = input.low_node_id === 'A' ? this.peer_proposal : this.own_proposal
-    const verifyResult = await verifyStructuralAgreement({ a, b, llm: input.llm, low_node_id: input.low_node_id })
+    const verifyResult = await verifyConsolidationAgreement({
+      a,
+      b,
+      llm: input.llm,
+      low_node_id: input.low_node_id,
+      transcript: this.lastRoundMessages(),
+      previous_artifact: this.current_artifact,
+    })
 
     let envelope: Envelope
     let canonicalForCommit: ConsolidatorOutput | null = null
