@@ -52,6 +52,7 @@ export class Room {
   current_turn_index = 0
   current_round = 0
   current_artifact: Artifact | null = null
+  pending_consolidation: ConsolidatorOutput | null = null
   private own_proposal: ConsolidatorOutput | null = null
   private peer_proposal: ConsolidatorOutput | null = null
   private propose_done_by: AgentId | null = null
@@ -220,6 +221,45 @@ export class Room {
       v: 1,
       room_id: this.deps.room_id,
       agent_id: this.participantForNodeId(input.our_node_id).agent_id,
+      type: 'consolidation_proposal',
+      payload: {
+        type: 'consolidation_proposal',
+        round_index: this.current_round,
+        ciphertext: JSON.stringify(out),
+        proposal_hash,
+      },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    return this.log.append(envelope, this.deps.clock.nowIso())
+  }
+
+  async runMediatorConsolidation(input: {
+    llm: LLMPort
+    signature: SignatureHex
+  }): Promise<Event> {
+    this.enforceTimeCap()
+    if (this.state !== 'consolidating') {
+      throw new Error(`cannot consolidate: state is ${this.state}`)
+    }
+    const mediator = this.participants.find((p) => p.role === 'mediator')
+    if (!mediator) {
+      throw new Error('this room has no mediator')
+    }
+    const out = await runRoundConsolidation({
+      llm: input.llm,
+      room_config: this.deps.config,
+      previous_artifact: this.current_artifact,
+      transcript_since_last_consolidation: this.lastRoundMessages(),
+    })
+    this.pending_consolidation = out
+    const proposal_hash = hashCanonical(out) as HashHex
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: mediator.agent_id,
       type: 'consolidation_proposal',
       payload: {
         type: 'consolidation_proposal',
@@ -541,7 +581,12 @@ export class Room {
       case 'consolidation_proposal': {
         const p = env.payload as { type: 'consolidation_proposal'; ciphertext: string }
         const parsed = JSON.parse(p.ciphertext) as ConsolidatorOutput
-        // Determine if this is our own or peer's proposal by agent_id.
+        const mediatorParticipant = this.participants.find((part) => part.role === 'mediator')
+        if (mediatorParticipant && mediatorParticipant.agent_id === env.agent_id) {
+          this.pending_consolidation = parsed
+          break
+        }
+        // Plan-7 peer-authored proposal: assign to own_proposal / peer_proposal.
         const isOwnAgent = this.participants.some((part) => part.agent_id === env.agent_id && part === this.peers()[0])
         if (this.own_proposal && this.peer_proposal) break // both set
         if (this.own_proposal === null && isOwnAgent) this.own_proposal = parsed
