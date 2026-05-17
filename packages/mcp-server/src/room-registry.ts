@@ -284,6 +284,7 @@ export class RoomRegistry {
     current_round: number
     participants: Array<{ agent_id: string; role_label: string; pubkey: string }>
     artifact: unknown
+    transcript: Array<{ role_label: string; content: string; turn_index: number; round_index: number }>
     head_hash: string | null
     consecutive_disputes: number
     hard_limit_hit: string | null
@@ -293,12 +294,29 @@ export class RoomRegistry {
   }> {
     const h = this.get(args.room_id)
     const r = h.room
+    const labelByAgent = new Map(r.participants.map((p) => [p.agent_id, p.role_label]))
+    let round = 0
+    const transcript = r.log
+      .getEvents()
+      .filter((e) => e.payload.type === 'send_message')
+      .map((e, idx) => {
+        const send = e.payload.payload as { type: 'send_message'; ciphertext: string }
+        const entry = {
+          role_label: labelByAgent.get(e.payload.agent_id) ?? e.payload.agent_id.slice(0, 8),
+          content: send.ciphertext,
+          turn_index: idx,
+          round_index: round,
+        }
+        if ((idx + 1) % 2 === 0) round++
+        return entry
+      })
     return {
       state: r.state,
       current_turn_index: r.current_turn_index,
       current_round: r.current_round,
       participants: r.participants.map((p) => ({ agent_id: p.agent_id, role_label: p.role_label, pubkey: p.pubkey })),
       artifact: r.current_artifact,
+      transcript,
       head_hash: r.log.getHeadHash(),
       consecutive_disputes: r.consecutive_disputes,
       hard_limit_hit: r.hard_limit_hit,

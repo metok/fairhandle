@@ -70,7 +70,10 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
     },
   },
   get_room_state: {
-    description: 'Inspect the current state of a room (artifact, transcript, whose turn).',
+    description:
+      'Inspect a room: state, whose turn, current round, the consolidated artifact, and ' +
+      'the full transcript of every message exchanged so far. Read the counterparty\'s ' +
+      'messages from the transcript field before responding.',
     inputSchema: {
       type: 'object',
       properties: { room_id: { type: 'string' } },
