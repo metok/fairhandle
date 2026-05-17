@@ -1,6 +1,9 @@
 import { config as dotenvConfig } from 'dotenv'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
 import { homedir } from 'node:os'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import fastifyStatic from '@fastify/static'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
@@ -28,6 +31,17 @@ async function main(): Promise<void> {
   fastify.get<{ Params: { room_id: string } }>('/api/rooms/:room_id/chain', async (req) => {
     return registry.getChain(req.params.room_id)
   })
+
+  // Serve the built web-ui SPA, if it has been built. Located at the repo's
+  // apps/web-ui/dist relative to this source file (packages/mcp-server/src).
+  const here = dirname(fileURLToPath(import.meta.url))
+  const webUiDist = resolve(here, '..', '..', '..', 'apps', 'web-ui', 'dist')
+  if (existsSync(webUiDist)) {
+    await fastify.register(fastifyStatic, { root: webUiDist, prefix: '/' })
+  } else {
+    console.error(`fairhandle: web-ui not built (${webUiDist} missing); HTTP serves /api only`)
+  }
+
   // The HTTP endpoint is secondary (web UI). A port collision — e.g. a stale
   // server instance from a previous Claude Desktop spawn — must NOT kill the
   // MCP stdio transport, which is the critical path Claude talks to.
