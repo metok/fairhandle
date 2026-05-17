@@ -12,6 +12,8 @@ import type {
   VerifierOutput,
   ArtifactEquivalenceInput,
   ArtifactEquivalenceOutput,
+  AuditConsolidationInput,
+  AuditConsolidationOutput,
 } from '@fairhandle/domain'
 
 dotenvConfig({ path: pathResolve(homedir(), '.fairhandle', '.env') })
@@ -191,6 +193,47 @@ export class AnthropicLLMAdapter implements LLMPort {
       }
     } catch {
       return { equivalent: false, divergences: ['grader JSON parse failed'] }
+    }
+  }
+
+  async auditConsolidation(
+    input: AuditConsolidationInput,
+  ): Promise<AuditConsolidationOutput> {
+    const prompt = [
+      'Here is the transcript since the last consolidation and the mediator\'s proposed consolidation.',
+      'Is the proposed consolidation a faithful, neutral, complete record of what was actually agreed and left open?',
+      'Flag anything mis-stated, omitted, or biased toward either side.',
+      '',
+      'Previous artifact:',
+      input.previous_artifact ? JSON.stringify(input.previous_artifact) : '<none — first round>',
+      '',
+      'Transcript since last consolidation:',
+      ...input.transcript_since_last_consolidation.map((m) =>
+        `[turn ${m.turn_index}, agent ${m.agent_id}]: ${m.content}`,
+      ),
+      '',
+      'Mediator\'s proposed consolidation:',
+      JSON.stringify(input.proposed_artifact),
+      '',
+      'Return ONLY JSON: {"faithful": true|false, "issues": ["<issue>", ...]}',
+    ].join('\n')
+
+    const resp = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const text = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) return { faithful: false, issues: ['auditor returned no JSON'] }
+    try {
+      const parsed = JSON.parse(match[0]) as { faithful?: boolean; issues?: string[] }
+      return {
+        faithful: parsed.faithful === true,
+        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+      }
+    } catch {
+      return { faithful: false, issues: ['auditor JSON parse failed'] }
     }
   }
 }

@@ -2,6 +2,48 @@ import { describe, it, expect } from 'vitest'
 import { ScriptedLLMAdapter } from '../src/index.js'
 import type { ConsolidatorOutput, VerifierOutput } from '@fairhandle/domain'
 
+describe('ScriptedLLMAdapter — auditConsolidation', () => {
+  it('defaults to faithful with no issues', async () => {
+    const llm = new ScriptedLLMAdapter({
+      consolidatorOutputs: [],
+      verifierAlways: { equivalent: true } as VerifierOutput,
+    })
+    expect(await llm.auditConsolidation({} as never)).toEqual({
+      faithful: true,
+      issues: [],
+    })
+  })
+  it('returns a single configured verdict for every call', async () => {
+    const llm = new ScriptedLLMAdapter({
+      consolidatorOutputs: [],
+      verifierAlways: { equivalent: true } as VerifierOutput,
+      auditConsolidation: { faithful: false, issues: ['biased toward A'] },
+    })
+    expect(await llm.auditConsolidation({} as never)).toEqual({
+      faithful: false,
+      issues: ['biased toward A'],
+    })
+    expect(await llm.auditConsolidation({} as never)).toEqual({
+      faithful: false,
+      issues: ['biased toward A'],
+    })
+  })
+  it('consumes an array per-call and repeats the last entry once exhausted', async () => {
+    const llm = new ScriptedLLMAdapter({
+      consolidatorOutputs: [],
+      verifierAlways: { equivalent: true } as VerifierOutput,
+      auditConsolidation: [
+        { faithful: true, issues: [] },
+        { faithful: false, issues: ['omission'] },
+      ],
+    })
+    expect(await llm.auditConsolidation({} as never)).toEqual({ faithful: true, issues: [] })
+    expect(await llm.auditConsolidation({} as never)).toEqual({ faithful: false, issues: ['omission'] })
+    // exhausted — last entry repeats
+    expect(await llm.auditConsolidation({} as never)).toEqual({ faithful: false, issues: ['omission'] })
+  })
+})
+
 function makeOutput(version: number): ConsolidatorOutput {
   return {
     artifact: {

@@ -36,6 +36,18 @@ export interface ArtifactEquivalenceOutput {
   divergences: string[]
 }
 
+export interface AuditConsolidationInput {
+  transcript_since_last_consolidation: Message[]
+  previous_artifact: Artifact | null
+  proposed_artifact: Artifact
+}
+
+export interface AuditConsolidationOutput {
+  faithful: boolean
+  /** When not faithful, what the mediator got wrong or biased. */
+  issues: string[]
+}
+
 export interface LLMPort {
   /** Run the consolidator on a transcript delta. */
   runConsolidator(input: ConsolidatorInput): Promise<ConsolidatorOutput>
@@ -49,4 +61,10 @@ export interface LLMPort {
   verifyArtifactEquivalence(
     input: ArtifactEquivalenceInput,
   ): Promise<ArtifactEquivalenceOutput>
+  /**
+   * A peer's faithfulness audit of the mediator's proposed consolidation —
+   * checks that the draft is a faithful, neutral, complete record of what was
+   * actually agreed and left open.
+   */
+  auditConsolidation(input: AuditConsolidationInput): Promise<AuditConsolidationOutput>
 }
