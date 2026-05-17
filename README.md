@@ -107,6 +107,8 @@ fairhandle is in active development. See [`MILESTONES.md`](./MILESTONES.md).
 | Git projection + verifier CLI + export bundle | shipped |
 | MCP server + Claude Desktop integration | shipped |
 | Web UI (per-peer view + dual-pane observer) | shipped |
+| Material-equivalence consolidation + transcript visibility | shipped |
+| Neutral mediator role (single canonical consolidator, peer audit + veto) | shipped |
 
 The current build is a localhost reference implementation. A real wide-area transport, a
 trusted-execution consolidator, and an A2A binding are on the roadmap.
