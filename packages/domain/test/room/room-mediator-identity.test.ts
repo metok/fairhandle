@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Room, type AgentParticipant, type ParticipantRole } from '../../src/index.js'
+import { Room, type AgentParticipant } from '../../src/index.js'
 import { defaultRoomConfig } from '../../src/index.js'
 import { StubSignatureAdapter } from '@fairhandle/signature-stub'
 import { FixedClock } from '@fairhandle/clock-system'
@@ -69,7 +69,7 @@ describe('Room — mediator identity (Task 1)', () => {
       role_label: 'Mediator',
       pubkey: MEDIATOR_PUBKEY,
       joined_at_event: 0,
-      role: 'mediator' as ParticipantRole,
+      role: 'mediator',
     }
     ;(room as unknown as { participants: AgentParticipant[] }).participants.unshift(mediatorParticipant)
 

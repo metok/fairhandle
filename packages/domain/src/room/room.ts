@@ -486,7 +486,7 @@ export class Room {
         const p = env.payload as { type: 'consolidation_proposal'; ciphertext: string }
         const parsed = JSON.parse(p.ciphertext) as ConsolidatorOutput
         // Determine if this is our own or peer's proposal by agent_id.
-        const isOwnAgent = this.participants.some((part) => part.agent_id === env.agent_id && part === this.participants[0])
+        const isOwnAgent = this.participants.some((part) => part.agent_id === env.agent_id && part === this.peers()[0])
         if (this.own_proposal && this.peer_proposal) break // both set
         if (this.own_proposal === null && isOwnAgent) this.own_proposal = parsed
         else this.peer_proposal = parsed
