@@ -28,7 +28,14 @@ async function main(): Promise<void> {
   fastify.get<{ Params: { room_id: string } }>('/api/rooms/:room_id/chain', async (req) => {
     return registry.getChain(req.params.room_id)
   })
-  await fastify.listen({ host: '127.0.0.1', port: HTTP_PORT })
+  // The HTTP endpoint is secondary (web UI). A port collision — e.g. a stale
+  // server instance from a previous Claude Desktop spawn — must NOT kill the
+  // MCP stdio transport, which is the critical path Claude talks to.
+  try {
+    await fastify.listen({ host: '127.0.0.1', port: HTTP_PORT })
+  } catch (e) {
+    console.error(`fairhandle: HTTP endpoint unavailable on port ${HTTP_PORT} (${(e as Error).message}); continuing with MCP-only`)
+  }
 
   // ---- MCP stdio ----
   const server = new Server(
