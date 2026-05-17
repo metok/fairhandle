@@ -42,12 +42,12 @@ export function createPairedChannels(): [ChannelPort, ChannelPort] {
   return [a, b]
 }
 
-class BroadcastChannel implements ChannelPort {
+class InMemoryBroadcastChannel implements ChannelPort {
   private handlers = new Set<Handler>()
-  private peers: BroadcastChannel[] = []
+  private peers: InMemoryBroadcastChannel[] = []
   private closed = false
 
-  bindPeers(peers: BroadcastChannel[]): void {
+  bindPeers(peers: InMemoryBroadcastChannel[]): void {
     this.peers = peers
   }
 
@@ -76,7 +76,7 @@ class BroadcastChannel implements ChannelPort {
 
 export function createBroadcastChannels(n: number): ChannelPort[] {
   if (n < 2) throw new Error('createBroadcastChannels requires n >= 2')
-  const channels = Array.from({ length: n }, () => new BroadcastChannel())
+  const channels = Array.from({ length: n }, () => new InMemoryBroadcastChannel())
   for (const ch of channels) {
     ch.bindPeers(channels.filter((other) => other !== ch))
   }
