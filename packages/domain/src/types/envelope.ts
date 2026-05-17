@@ -40,7 +40,8 @@ export interface ConsolidationMergePayload {
   type: 'consolidation_merge'
   round_index: number
   canonical_artifact_hash: HashHex
-  proposal_hashes: { a: HashHex; b: HashHex }
+  /** Present on the no-mediator path (two proposals); absent on the mediator path (one canonical proposal). */
+  proposal_hashes?: { a: HashHex; b: HashHex }
   /** Encrypted in real impl; plaintext in Plan 1 stubs. */
   canonical_artifact_ciphertext: string
 }

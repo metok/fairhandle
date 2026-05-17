@@ -338,7 +338,66 @@ export class Room {
     const event = this.log.append(envelope, this.deps.clock.nowIso())
     if (envelope.type === 'consolidation_accept' && !this.round_accepts.includes(input.agent_id)) {
       this.round_accepts.push(input.agent_id)
+    } else if (envelope.type === 'consolidation_dispute') {
+      this.applyDisputeResolution()
     }
+    return event
+  }
+
+  async runMediatorMerge(input: { signature: SignatureHex }): Promise<Event> {
+    this.enforceTimeCap()
+    if (this.state !== 'consolidating') {
+      throw new Error(`cannot runMediatorMerge: state is ${this.state}`)
+    }
+    const mediator = this.participants.find((p) => p.role === 'mediator')
+    if (!mediator) {
+      throw new Error('this room has no mediator')
+    }
+    if (this.pending_consolidation === null) {
+      throw new Error('cannot runMediatorMerge: pending_consolidation is null')
+    }
+    if (!this.peers().every((p) => this.round_accepts.includes(p.agent_id))) {
+      throw new Error('not all peers have accepted the consolidation')
+    }
+    const canonical = this.pending_consolidation
+    const roundForCommit = this.current_round
+    const envelope: Envelope = {
+      v: 1,
+      room_id: this.deps.room_id,
+      agent_id: mediator.agent_id,
+      type: 'consolidation_merge',
+      payload: {
+        type: 'consolidation_merge',
+        round_index: this.current_round,
+        canonical_artifact_hash: hashCanonical(canonical.artifact) as HashHex,
+        canonical_artifact_ciphertext: JSON.stringify(canonical.artifact),
+      },
+      prev_event_hash: this.log.getHeadHash() as HashHex,
+      client_ts: this.deps.clock.nowIso(),
+      nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      signature: input.signature,
+    }
+    const event = this.log.append(envelope, this.deps.clock.nowIso())
+    this.current_artifact = canonical.artifact
+    this.consecutive_disputes = 0
+    if (this.deps.artifact_history) {
+      await this.deps.artifact_history.commit(
+        {
+          round_index: roundForCommit,
+          canonical_peer_pubkey: mediator.pubkey,
+          canonical_peer_label: mediator.role_label,
+          other_peer_pubkey: this.peers()[0]!.pubkey,
+          other_peer_label: this.peers()[0]!.role_label,
+          merkle_event_hash: event.hash,
+          proposal_hash_a: hashCanonical(canonical) as HashHex,
+          proposal_hash_b: hashCanonical(canonical) as HashHex,
+          changelog: canonical.changelog,
+          timestamp_iso: event.appended_at,
+        },
+        canonical.artifact,
+      )
+    }
+    this.advanceAfterConsolidation()
     return event
   }
 
@@ -447,6 +506,22 @@ export class Room {
     if (this.state !== 'paused') throw new Error(`cannot close: state is ${this.state}`)
     this.hard_limit_hit = 'deadlock'
     this.state = 'closing'
+  }
+
+  private applyDisputeResolution(): void {
+    this.consecutive_disputes++
+    if (this.consecutive_disputes >= 3) {
+      if (this.config.deadlock_policy === 'best_effort') {
+        this.hard_limit_hit = 'deadlock'
+        this.state = 'closing'
+        return
+      }
+      if (this.config.deadlock_policy === 'escalate_to_humans') {
+        this.state = 'paused'
+        return
+      }
+    }
+    if (this.state === 'consolidating') this.advanceAfterConsolidation()
   }
 
   private advanceAfterConsolidation(): void {
@@ -669,19 +744,7 @@ export class Room {
         break
       }
       case 'consolidation_dispute': {
-        this.consecutive_disputes++
-        if (this.consecutive_disputes >= 3) {
-          if (this.config.deadlock_policy === 'best_effort') {
-            this.hard_limit_hit = 'deadlock'
-            this.state = 'closing'
-            break
-          }
-          if (this.config.deadlock_policy === 'escalate_to_humans') {
-            this.state = 'paused'
-            break
-          }
-        }
-        if (this.state === 'consolidating') this.advanceAfterConsolidation()
+        this.applyDisputeResolution()
         break
       }
       case 'consolidation_accept': {
