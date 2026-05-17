@@ -13,7 +13,7 @@ import type { ClockPort } from '../ports/clock.js'
 import type { SignaturePort } from '../ports/signature.js'
 import type { LLMPort, ConsolidatorOutput } from '../ports/llm.js'
 import type { ArtifactHistoryPort } from '../ports/artifact-history.js'
-import type { Envelope, JoinRoomPayload, MediatorJoinPayload } from '../types/envelope.js'
+import type { Envelope, JoinRoomPayload, MediatorJoinPayload, ConsolidationAcceptPayload } from '../types/envelope.js'
 import type { Event } from '../types/event.js'
 import type { Artifact } from '../types/artifact.js'
 import type { Message } from '../types/message.js'
@@ -60,6 +60,7 @@ export class Room {
   hard_limit_hit: 'turn_cap' | 'time_cap' | 'deadlock' | null = null
   private active_started_at_ms: number | null = null
   walk_away_by: AgentId | null = null
+  private round_accepts: AgentId[] = []
 
   private constructor(private readonly deps: RoomDeps) {
     validateRoomConfig(deps.config)
@@ -74,6 +75,7 @@ export class Room {
   get config(): RoomConfig { return this.deps.config }
   get proposeDoneBy(): AgentId | null { return this.propose_done_by }
   get peerProposal(): ConsolidatorOutput | null { return this.peer_proposal }
+  get roundAccepts(): readonly AgentId[] { return this.round_accepts }
 
   async handleJoin(input: JoinInput): Promise<Event[]> {
     if (this.state !== 'waiting') {
@@ -275,6 +277,70 @@ export class Room {
     return this.log.append(envelope, this.deps.clock.nowIso())
   }
 
+  async reviewConsolidation(input: {
+    agent_id: AgentId
+    llm: LLMPort
+    signature: SignatureHex
+  }): Promise<Event> {
+    this.enforceTimeCap()
+    if (this.state !== 'consolidating') {
+      throw new Error(`cannot reviewConsolidation: state is ${this.state}`)
+    }
+    if (this.pending_consolidation === null) {
+      throw new Error('nothing to review: pending_consolidation is null')
+    }
+    const isPeer = this.peers().some((p) => p.agent_id === input.agent_id)
+    if (!isPeer) {
+      throw new Error('reviewConsolidation: agent_id must be a peer participant')
+    }
+    const auditResult = await input.llm.auditConsolidation({
+      transcript_since_last_consolidation: this.lastRoundMessages(),
+      previous_artifact: this.current_artifact,
+      proposed_artifact: this.pending_consolidation.artifact,
+    })
+
+    let envelope: Envelope
+    if (auditResult.faithful) {
+      const proposal_hash = hashCanonical(this.pending_consolidation) as HashHex
+      const acceptPayload: ConsolidationAcceptPayload = {
+        type: 'consolidation_accept',
+        round_index: this.current_round,
+        proposal_hash,
+      }
+      envelope = {
+        v: 1,
+        room_id: this.deps.room_id,
+        agent_id: input.agent_id,
+        type: 'consolidation_accept',
+        payload: acceptPayload,
+        prev_event_hash: this.log.getHeadHash() as HashHex,
+        client_ts: this.deps.clock.nowIso(),
+        nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+        signature: input.signature,
+      }
+      if (!this.round_accepts.includes(input.agent_id)) {
+        this.round_accepts.push(input.agent_id)
+      }
+    } else {
+      envelope = {
+        v: 1,
+        room_id: this.deps.room_id,
+        agent_id: input.agent_id,
+        type: 'consolidation_dispute',
+        payload: {
+          type: 'consolidation_dispute',
+          round_index: this.current_round,
+          disagreement_summary_ciphertext: JSON.stringify({ issues: auditResult.issues }),
+        },
+        prev_event_hash: this.log.getHeadHash() as HashHex,
+        client_ts: this.deps.clock.nowIso(),
+        nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
+        signature: input.signature,
+      }
+    }
+    return this.log.append(envelope, this.deps.clock.nowIso())
+  }
+
   async attemptMerge(input: {
     llm: LLMPort
     low_node_id: 'A' | 'B'
@@ -386,6 +452,7 @@ export class Room {
     this.own_proposal = null
     this.peer_proposal = null
     this.pending_consolidation = null
+    this.round_accepts = []
     this.current_round++
     if (this.current_turn_index >= this.config.turn_cap) {
       this.hard_limit_hit = 'turn_cap'
@@ -614,6 +681,12 @@ export class Room {
           }
         }
         if (this.state === 'consolidating') this.advanceAfterConsolidation()
+        break
+      }
+      case 'consolidation_accept': {
+        if (!this.round_accepts.includes(env.agent_id)) {
+          this.round_accepts.push(env.agent_id)
+        }
         break
       }
       case 'propose_done': {

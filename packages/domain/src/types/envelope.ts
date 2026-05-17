@@ -7,6 +7,7 @@ export type EnvelopeType =
   | 'consolidation_proposal'
   | 'consolidation_merge'
   | 'consolidation_dispute'
+  | 'consolidation_accept'
   | 'propose_done'
   | 'accept_done'
   | 'leave_room'
@@ -47,9 +48,15 @@ export interface ConsolidationMergePayload {
 export interface ConsolidationDisputePayload {
   type: 'consolidation_dispute'
   round_index: number
-  proposal_hashes: { a: HashHex; b: HashHex }
+  proposal_hashes?: { a: HashHex; b: HashHex }
   /** Encrypted in real impl; plaintext in Plan 1 stubs. */
   disagreement_summary_ciphertext: string
+}
+
+export interface ConsolidationAcceptPayload {
+  type: 'consolidation_accept'
+  round_index: number
+  proposal_hash: HashHex
 }
 
 export interface ProposeDonePayload {
@@ -79,6 +86,7 @@ export type EnvelopePayload =
   | ConsolidationProposalPayload
   | ConsolidationMergePayload
   | ConsolidationDisputePayload
+  | ConsolidationAcceptPayload
   | ProposeDonePayload
   | AcceptDonePayload
   | LeaveRoomPayload
