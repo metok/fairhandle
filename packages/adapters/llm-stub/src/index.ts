@@ -4,11 +4,15 @@ import type {
   ConsolidatorOutput,
   VerifierInput,
   VerifierOutput,
+  ArtifactEquivalenceInput,
+  ArtifactEquivalenceOutput,
 } from '@fairhandle/domain'
 
 export interface ScriptedLLMConfig {
   consolidatorOutputs: ConsolidatorOutput[]
   verifierAlways: VerifierOutput
+  /** Verdict returned by verifyArtifactEquivalence. Defaults to equivalent. */
+  artifactEquivalence?: ArtifactEquivalenceOutput
 }
 
 export class ScriptedLLMAdapter implements LLMPort {
@@ -25,5 +29,11 @@ export class ScriptedLLMAdapter implements LLMPort {
 
   async runVerifier(_input: VerifierInput): Promise<VerifierOutput> {
     return structuredClone(this.cfg.verifierAlways)
+  }
+
+  async verifyArtifactEquivalence(
+    _input: ArtifactEquivalenceInput,
+  ): Promise<ArtifactEquivalenceOutput> {
+    return structuredClone(this.cfg.artifactEquivalence ?? { equivalent: true, divergences: [] })
   }
 }

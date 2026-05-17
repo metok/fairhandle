@@ -42,4 +42,25 @@ describe('ScriptedLLMAdapter', () => {
     })
     expect(await llm.runVerifier({ clause_a_text: 'x', clause_b_text: 'y' })).toEqual({ equivalent: false })
   })
+  it('defaults artifact equivalence to equivalent', async () => {
+    const llm = new ScriptedLLMAdapter({
+      consolidatorOutputs: [],
+      verifierAlways: { equivalent: true } as VerifierOutput,
+    })
+    expect(await llm.verifyArtifactEquivalence({} as never)).toEqual({
+      equivalent: true,
+      divergences: [],
+    })
+  })
+  it('returns the scripted artifact-equivalence verdict', async () => {
+    const llm = new ScriptedLLMAdapter({
+      consolidatorOutputs: [],
+      verifierAlways: { equivalent: true } as VerifierOutput,
+      artifactEquivalence: { equivalent: false, divergences: ['fee differs'] },
+    })
+    expect(await llm.verifyArtifactEquivalence({} as never)).toEqual({
+      equivalent: false,
+      divergences: ['fee differs'],
+    })
+  })
 })

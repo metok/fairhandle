@@ -10,6 +10,8 @@ import type {
   ConsolidatorOutput,
   VerifierInput,
   VerifierOutput,
+  ArtifactEquivalenceInput,
+  ArtifactEquivalenceOutput,
 } from '@fairhandle/domain'
 
 dotenvConfig({ path: pathResolve(homedir(), '.fairhandle', '.env') })
@@ -144,6 +146,51 @@ export class AnthropicLLMAdapter implements LLMPort {
       return { equivalent: !!parsed.equivalent }
     } catch {
       return { equivalent: false }
+    }
+  }
+
+  async verifyArtifactEquivalence(
+    input: ArtifactEquivalenceInput,
+  ): Promise<ArtifactEquivalenceOutput> {
+    const describe = (label: string, a: ArtifactEquivalenceInput['artifact_a']): string =>
+      [
+        `=== Draft ${label} ===`,
+        a.markdown,
+        `open_issues: ${JSON.stringify(a.open_issues)}`,
+        `clauses: ${JSON.stringify(a.overlay.map((c) => ({ type: c.clause_type, status: c.status })))}`,
+      ].join('\n')
+
+    const prompt = [
+      'Two AI scribes independently consolidated the SAME negotiation round into',
+      'draft documents A and B. Ignore ALL differences of wording, formatting,',
+      'clause ordering, section labels, and character offsets. Judge ONLY whether',
+      'A and B capture materially the same agreed terms, the same open issues, and',
+      'the same contested points. Two drafts that record the same deal in different',
+      'prose are equivalent.',
+      '',
+      describe('A', input.artifact_a),
+      '',
+      describe('B', input.artifact_b),
+      '',
+      'Return ONLY JSON: {"equivalent": true|false, "divergences": ["<material difference>", ...]}',
+    ].join('\n')
+
+    const resp = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const text = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) return { equivalent: false, divergences: ['grader returned no JSON'] }
+    try {
+      const parsed = JSON.parse(match[0]) as { equivalent?: boolean; divergences?: string[] }
+      return {
+        equivalent: parsed.equivalent === true,
+        divergences: Array.isArray(parsed.divergences) ? parsed.divergences : [],
+      }
+    } catch {
+      return { equivalent: false, divergences: ['grader JSON parse failed'] }
     }
   }
 }
