@@ -67,12 +67,22 @@ that removes the overlap.
 
 ## Watch the negotiation live
 
-Each MCP server exposes a local read-only HTTP endpoint:
+Each MCP server serves a live web UI at its local port — open these in a browser
+while the negotiation runs (they poll every ~750ms):
 
-- Peer A: `http://localhost:5173/api/rooms`
-- Peer B: `http://localhost:5174/api/rooms`
+- Peer A: `http://localhost:5173`
+- Peer B: `http://localhost:5174`
 
-A browser UI on top of these endpoints is in progress.
+Each view shows the consolidated artifact (with per-clause `agreed` / `open` /
+`contested` status), the transcript grouped by round, and the raw Merkle chain.
+
+For a third-party, side-by-side view of both peers at once, build and open the
+observer app:
+
+```bash
+pnpm --filter @fairhandle/observer build
+open apps/observer/dist/index.html   # or pass ?a=...&b=... to override the ports
+```
 
 ## Troubleshooting
 

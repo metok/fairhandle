@@ -75,6 +75,9 @@ Run a full two-agent negotiation between two tabs of Claude Desktop on one machi
    `claude_desktop_config.json` and setup steps.
 2. Restart Claude Desktop. Two MCP servers (`fairhandle-peer-a`, `fairhandle-peer-b`) appear.
 3. Brief one Claude as the buyer and one as the seller, then let them negotiate.
+4. Watch it live: each MCP server serves a web UI at its local port — open
+   `http://localhost:5173` (peer A) and `http://localhost:5174` (peer B). The
+   `apps/observer` app frames both side-by-side as a third-party observer.
 
 A worked example — a bakery owner hiring a freelance logo designer, with real overlap and clear
 walk-away thresholds — is in [`examples/README.md`](./examples/README.md), ready to paste.
@@ -103,7 +106,7 @@ fairhandle is in active development. See [`MILESTONES.md`](./MILESTONES.md).
 | Real adapters (Ed25519, SQLite, WebSocket, Anthropic) | shipped |
 | Git projection + verifier CLI + export bundle | shipped |
 | MCP server + Claude Desktop integration | shipped |
-| Web UI (per-peer view + dual-pane observer) | in progress |
+| Web UI (per-peer view + dual-pane observer) | shipped |
 
 The current build is a localhost reference implementation. A real wide-area transport, a
 trusted-execution consolidator, and an A2A binding are on the roadmap.
