@@ -49,6 +49,16 @@ describe('Room — mediator_join (Task 2)', () => {
     expect(room.state).toBe('active')
   })
 
+  it('room reaches active after mediator joins first, then both peers join', async () => {
+    const { room, a, b } = await makeRoom(MEDIATOR_PUBKEY)
+    await room.handleMediatorJoin({ pubkey: MEDIATOR_PUBKEY, signature: 'sm' as never })
+    expect(room.state).toBe('waiting')
+    await room.handleJoin({ pubkey: a.pubkey, role_label: 'A', signature: 'sa' as never })
+    expect(room.state).toBe('waiting')
+    await room.handleJoin({ pubkey: b.pubkey, role_label: 'B', signature: 'sb' as never })
+    expect(room.state).toBe('active')
+  })
+
   it('mediator participant has role mediator and role_label Mediator after joining', async () => {
     const { room, a, b } = await makeRoom(MEDIATOR_PUBKEY)
     await room.handleJoin({ pubkey: a.pubkey, role_label: 'A', signature: 'sa' as never })
@@ -70,22 +80,25 @@ describe('Room — mediator_join (Task 2)', () => {
   })
 
   it('handleMediatorJoin on room with mediator_pubkey null throws', async () => {
-    const { room, a, b } = await makeRoom(null)
+    // Only one peer joins so the room stays waiting — the null-mediator guard fires.
+    const { room, a } = await makeRoom(null)
     await room.handleJoin({ pubkey: a.pubkey, role_label: 'A', signature: 'sa' as never })
-    await room.handleJoin({ pubkey: b.pubkey, role_label: 'B', signature: 'sb' as never })
+    expect(room.state).toBe('waiting')
     await expect(
       room.handleMediatorJoin({ pubkey: MEDIATOR_PUBKEY, signature: 'sm' as never }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/no mediator expected for this room/i)
   })
 
   it('second handleMediatorJoin throws mediator already joined', async () => {
-    const { room, a, b } = await makeRoom(MEDIATOR_PUBKEY)
+    // Only one peer joins so the room stays waiting — ensures the duplicate-mediator
+    // guard fires rather than the state guard.
+    const { room, a } = await makeRoom(MEDIATOR_PUBKEY)
     await room.handleJoin({ pubkey: a.pubkey, role_label: 'A', signature: 'sa' as never })
-    await room.handleJoin({ pubkey: b.pubkey, role_label: 'B', signature: 'sb' as never })
     await room.handleMediatorJoin({ pubkey: MEDIATOR_PUBKEY, signature: 'sm' as never })
+    expect(room.state).toBe('waiting')
     await expect(
       room.handleMediatorJoin({ pubkey: MEDIATOR_PUBKEY, signature: 'sm2' as never }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/mediator already joined/i)
   })
 
   it('handleMediatorJoin in non-waiting state throws', async () => {

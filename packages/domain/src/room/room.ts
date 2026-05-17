@@ -518,12 +518,15 @@ export class Room {
         break
       }
       case 'mediator_join': {
+        if (this.deps.config.mediator_pubkey === null) {
+          throw new Error('received mediator_join but no mediator is configured for this room')
+        }
         const last = this.log.getHead()!
         if (this.participants.some((p) => p.agent_id === env.agent_id)) return
         this.participants.push({
           agent_id: env.agent_id,
           role_label: 'Mediator',
-          pubkey: this.deps.config.mediator_pubkey ?? ('' as Pubkey),
+          pubkey: this.deps.config.mediator_pubkey,
           joined_at_event: last.index,
           role: 'mediator',
         })
