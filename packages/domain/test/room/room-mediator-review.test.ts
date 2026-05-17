@@ -4,6 +4,7 @@ import { StubSignatureAdapter } from '@fairhandle/signature-stub'
 import { FixedClock } from '@fairhandle/clock-system'
 import { ScriptedLLMAdapter } from '@fairhandle/llm-stub'
 import type { Pubkey } from '../../src/index.js'
+import type { PayloadOf } from '../../src/types/envelope.js'
 
 const ROOM = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
 const MEDIATOR_PUBKEY = 'mediator-pubkey-hex-task5' as Pubkey
@@ -79,7 +80,7 @@ describe('Room — reviewConsolidation (Task 5)', () => {
     expect(event.payload.type).toBe('consolidation_accept')
     expect(event.payload.agent_id).toBe(aId)
 
-    const payload = event.payload.payload as { type: 'consolidation_accept'; round_index: number; proposal_hash: string }
+    const payload = event.payload.payload as PayloadOf<'consolidation_accept'>
     expect(payload.type).toBe('consolidation_accept')
     expect(payload.round_index).toBe(0)
     expect(typeof payload.proposal_hash).toBe('string')

@@ -318,9 +318,6 @@ export class Room {
         nonce: 'AAAAAAAAAAAAAAAAAAAAAA==',
         signature: input.signature,
       }
-      if (!this.round_accepts.includes(input.agent_id)) {
-        this.round_accepts.push(input.agent_id)
-      }
     } else {
       envelope = {
         v: 1,
@@ -338,7 +335,11 @@ export class Room {
         signature: input.signature,
       }
     }
-    return this.log.append(envelope, this.deps.clock.nowIso())
+    const event = this.log.append(envelope, this.deps.clock.nowIso())
+    if (envelope.type === 'consolidation_accept' && !this.round_accepts.includes(input.agent_id)) {
+      this.round_accepts.push(input.agent_id)
+    }
+    return event
   }
 
   async attemptMerge(input: {
