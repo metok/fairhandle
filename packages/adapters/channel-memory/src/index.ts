@@ -41,3 +41,44 @@ export function createPairedChannels(): [ChannelPort, ChannelPort] {
   b.bind(a)
   return [a, b]
 }
+
+class BroadcastChannel implements ChannelPort {
+  private handlers = new Set<Handler>()
+  private peers: BroadcastChannel[] = []
+  private closed = false
+
+  bindPeers(peers: BroadcastChannel[]): void {
+    this.peers = peers
+  }
+
+  async send(env: Envelope): Promise<void> {
+    if (this.closed) throw new Error('channel closed')
+    const peers = this.peers
+    queueMicrotask(() => {
+      for (const peer of peers) {
+        for (const h of peer.handlers) h(env)
+      }
+    })
+  }
+
+  onReceive(handler: Handler): () => void {
+    this.handlers.add(handler)
+    return () => {
+      this.handlers.delete(handler)
+    }
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    this.handlers.clear()
+  }
+}
+
+export function createBroadcastChannels(n: number): ChannelPort[] {
+  if (n < 2) throw new Error('createBroadcastChannels requires n >= 2')
+  const channels = Array.from({ length: n }, () => new BroadcastChannel())
+  for (const ch of channels) {
+    ch.bindPeers(channels.filter((other) => other !== ch))
+  }
+  return channels
+}
