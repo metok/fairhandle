@@ -91,4 +91,15 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
       required: [],
     },
   },
+  join_as_mediator: {
+    description:
+      'Join this server (acting as a mediator) to a room. Call this AFTER both peers have called `create_room`/`join_room`. Uses the pubkey returned by `get_mediator_identity`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        invite_code: { type: 'string', description: 'fh1:... invite code from the room creator.' },
+      },
+      required: ['invite_code'],
+    },
+  },
 }

@@ -311,6 +311,13 @@ importers:
       tsx:
         specifier: ^4.19.0
         version: 4.21.0
+    devDependencies:
+      '@fairhandle/channel-memory':
+        specifier: workspace:*
+        version: link:../adapters/channel-memory
+      '@fairhandle/llm-stub':
+        specifier: workspace:*
+        version: link:../adapters/llm-stub
 
   packages/verifier:
     dependencies:

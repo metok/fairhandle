@@ -6,6 +6,10 @@
   "main": "./src/index.ts",
   "bin": { "fairhandle-mcp": "./bin/fairhandle-mcp" },
   "scripts": { "build": "tsc -b", "test": "vitest run", "typecheck": "tsc -b" },
+  "devDependencies": {
+    "@fairhandle/channel-memory": "workspace:*",
+    "@fairhandle/llm-stub": "workspace:*"
+  },
   "dependencies": {
     "@fairhandle/domain": "workspace:*",
     "@fairhandle/signature-ed25519": "workspace:*",

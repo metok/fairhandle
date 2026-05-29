@@ -7,6 +7,7 @@ import {
   type RoomId,
   type RoomConfig,
   type ChannelPort,
+  type LLMPort,
   type Pubkey,
   type AgentId,
   type Envelope,
@@ -28,6 +29,21 @@ export interface RoomRegistryConfig {
   role_label: string
   /** Base directory for room-specific state. Defaults to a fresh tmp dir per process. */
   base_dir?: string
+  /**
+   * Injectable host channel factory for tests. Given a mediator flag, returns a ChannelPort
+   * with a listen() method. Defaults to WebSocketHubChannel (mediator=true) or
+   * WebSocketServerChannel (mediator=false).
+   */
+  host_channel_factory?: (opts: { mediator: boolean }) => ChannelPort & { listen: () => Promise<number> }
+  /**
+   * Injectable client channel factory for tests. Returns a ChannelPort with a connect() method.
+   * Defaults to new WebSocketClientChannel(url).
+   */
+  client_channel_factory?: (_url: string) => ChannelPort & { connect: () => Promise<void> }
+  /**
+   * Injectable LLM factory for tests. Defaults to new AnthropicLLMAdapter().
+   */
+  llm_factory?: () => LLMPort
 }
 
 interface RoomHandle {
@@ -41,7 +57,7 @@ interface RoomHandle {
   myPubkey: Pubkey
   myIdx: 0 | 1
   myRoleLabel: string
-  llm: AnthropicLLMAdapter
+  llm: LLMPort
   baseDir: string
   /** Background loop driving the protocol forward (consolidation, etc.). */
   loopPromise: Promise<void>
@@ -66,6 +82,9 @@ export class RoomRegistry {
   private clock = new SystemClock()
   private baseDir: string
   private mediatorKeypairPromise: Promise<{ pubkey: string; private_handle: unknown }> | null = null
+  // Per-room serialization queues: concurrent persistEvents calls are chained
+  // to prevent UNIQUE constraint violations on the SQLite event log.
+  private persistTails = new Map<string, Promise<void>>()
 
   constructor(private readonly cfg: RoomRegistryConfig) {
     this.baseDir = cfg.base_dir ?? mkdtempSync(join(tmpdir(), 'fairhandle-mcp-'))
@@ -97,6 +116,8 @@ export class RoomRegistry {
         return this.getRoomState(args as { room_id: string })
       case 'get_mediator_identity':
         return this.getMediatorIdentity()
+      case 'join_as_mediator':
+        return this.joinAsMediator(args as { invite_code: string })
       default:
         throw new Error(`unknown tool: ${name}`)
     }
@@ -139,7 +160,11 @@ export class RoomRegistry {
 
     let channel: ChannelPort
     let port: number
-    if (config.mediator_pubkey !== null) {
+    if (this.cfg.host_channel_factory) {
+      const ch = this.cfg.host_channel_factory({ mediator: config.mediator_pubkey !== null })
+      port = await ch.listen()
+      channel = ch
+    } else if (config.mediator_pubkey !== null) {
       const hub = new WebSocketHubChannel({ port: 0 })
       port = await hub.listen()
       channel = hub
@@ -150,7 +175,7 @@ export class RoomRegistry {
     }
 
     const { storage, gitDir, artifactHistory, baseDir } = this.setupStorage(room_id)
-    const llm = new AnthropicLLMAdapter()
+    const llm: LLMPort = this.cfg.llm_factory ? this.cfg.llm_factory() : new AnthropicLLMAdapter()
 
     const room = await Room.create({
       room_id: room_id as RoomId,
@@ -211,9 +236,12 @@ export class RoomRegistry {
     const config = { ...defaultRoomConfig(), mediator_pubkey: invite.mediator_pubkey ?? null }
     const sig = new Ed25519SignatureAdapter()
     const myKp = await sig.generateEphemeralKeyPair()
-    const llm = new AnthropicLLMAdapter()
+    const llm: LLMPort = this.cfg.llm_factory ? this.cfg.llm_factory() : new AnthropicLLMAdapter()
 
-    const client = new WebSocketClientChannel(`ws://${invite.host}:${invite.port}`)
+    const url = `ws://${invite.host}:${invite.port}`
+    const client: ChannelPort & { connect: () => Promise<void> } = this.cfg.client_channel_factory
+      ? this.cfg.client_channel_factory(url)
+      : new WebSocketClientChannel(url)
     await client.connect()
     const channel: ChannelPort = client
 
@@ -264,6 +292,82 @@ export class RoomRegistry {
       closed: false,
     }
     handle.loopPromise = this.driveLoop(room_id, handle, 'B')
+    this.rooms.set(room_id, handle)
+    return { room_id }
+  }
+
+  async joinAsMediator(args: { invite_code: string }): Promise<JoinRoomResult> {
+    const invite = decodeInvite(args.invite_code)
+    if (invite.mediator_pubkey === null) {
+      throw new Error('invite is not for a mediator room')
+    }
+    const room_id = invite.room_id
+
+    const mediatorKp = await this.getMediatorKeypair()
+    if (mediatorKp.pubkey !== invite.mediator_pubkey) {
+      throw new Error(
+        `mediator pubkey mismatch: this server's pubkey (${mediatorKp.pubkey}) does not match invite's mediator_pubkey (${invite.mediator_pubkey})`,
+      )
+    }
+
+    const config: RoomConfig = { ...defaultRoomConfig(), mediator_pubkey: invite.mediator_pubkey }
+
+    const sig = new Ed25519SignatureAdapter()
+    const llm: LLMPort = this.cfg.llm_factory ? this.cfg.llm_factory() : new AnthropicLLMAdapter()
+
+    const url = `ws://${invite.host}:${invite.port}`
+    const client: ChannelPort & { connect: () => Promise<void> } = this.cfg.client_channel_factory
+      ? this.cfg.client_channel_factory(url)
+      : new WebSocketClientChannel(url)
+    await client.connect()
+    const channel: ChannelPort = client
+
+    const { storage, gitDir, artifactHistory, baseDir } = this.setupStorage(room_id)
+
+    const room = await Room.create({
+      room_id: room_id as RoomId,
+      config,
+      signature: sig,
+      clock: this.clock,
+      artifact_history: artifactHistory,
+    })
+
+    channel.onReceive((env: Envelope) => {
+      void room.handleRemoteEnvelope(env).then(() => this.persistEvents(room_id, room, storage))
+    })
+
+    await waitFor(
+      () => room.participants.filter((p) => p.role === 'peer').length === 2,
+      30_000,
+      'never saw both peers join',
+    )
+
+    const mediatorJoinEvents = await room.handleMediatorJoin({
+      pubkey: mediatorKp.pubkey as Pubkey,
+      signature: 'placeholder' as never,
+    })
+    for (const ev of mediatorJoinEvents) await channel.send(ev.payload)
+    await this.persistEvents(room_id, room, storage)
+
+    const mediatorParticipant = room.participants.find((p) => p.role === 'mediator')
+    if (!mediatorParticipant) throw new Error('mediator participant not found after handleMediatorJoin')
+
+    const handle: RoomHandle = {
+      room,
+      channel,
+      storage,
+      gitDir,
+      artifactHistory,
+      sig,
+      myAgentId: mediatorParticipant.agent_id,
+      myPubkey: mediatorKp.pubkey as Pubkey,
+      myIdx: 0,
+      myRoleLabel: 'Mediator',
+      llm,
+      baseDir,
+      loopPromise: Promise.resolve(),
+      closed: false,
+    }
     this.rooms.set(room_id, handle)
     return { room_id }
   }
@@ -421,15 +525,19 @@ export class RoomRegistry {
     return { storage, gitDir, artifactHistory, baseDir }
   }
 
-  private async persistEvents(room_id: string, room: Room, storage: SqliteStorageAdapter): Promise<void> {
-    const events = room.log.getEvents()
-    const stored = await storage.getEvents(room_id as RoomId)
-    for (let i = stored.length; i < events.length; i++) {
-      await storage.appendEvent(room_id as RoomId, events[i]!)
-    }
-    // Also write chain.json snapshot for HTTP and verifier access.
-    const chainPath = join(this.rooms.get(room_id)?.baseDir ?? this.baseDir, 'chain.json')
-    writeFileSync(chainPath, JSON.stringify({ room_id, events }))
+  private persistEvents(room_id: string, room: Room, storage: SqliteStorageAdapter): Promise<void> {
+    const tail = (this.persistTails.get(room_id) ?? Promise.resolve()).then(async () => {
+      const events = room.log.getEvents()
+      const stored = await storage.getEvents(room_id as RoomId)
+      for (let i = stored.length; i < events.length; i++) {
+        await storage.appendEvent(room_id as RoomId, events[i]!)
+      }
+      // Also write chain.json snapshot for HTTP and verifier access.
+      const chainPath = join(this.rooms.get(room_id)?.baseDir ?? this.baseDir, 'chain.json')
+      writeFileSync(chainPath, JSON.stringify({ room_id, events }))
+    })
+    this.persistTails.set(room_id, tail.catch(() => {}))
+    return tail
   }
 
   /**
