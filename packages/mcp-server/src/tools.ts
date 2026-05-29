@@ -6,12 +6,14 @@ export interface ToolSpec {
 export const TOOL_SPECS: Record<string, ToolSpec> = {
   create_room: {
     description:
-      'Create a new fairhandle negotiation room. Returns the invite code to send to your counterparty out-of-band.',
+      'Create a new fairhandle negotiation room. Returns the invite code to send to your counterparty out-of-band. ' +
+      'When mediator_pubkey is set, the room expects a neutral mediator (with that pubkey) to join and the host binds a broadcasting hub instead of a point-to-point server.',
     inputSchema: {
       type: 'object',
       properties: {
         role_label: { type: 'string', description: 'Display name for this peer (e.g. "Alice" or "PeerA").' },
         opening_artifact: { type: 'string', description: 'Optional initial markdown draft to seed the negotiation.' },
+        mediator_pubkey: { type: 'string', description: 'Pubkey of the neutral mediator server. Obtain via get_mediator_identity on the mediator server before calling create_room.' },
       },
       required: ['role_label'],
     },

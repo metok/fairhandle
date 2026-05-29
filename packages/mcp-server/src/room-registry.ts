@@ -11,7 +11,7 @@ import {
   type Envelope,
 } from '@fairhandle/domain'
 import { Ed25519SignatureAdapter } from '@fairhandle/signature-ed25519'
-import { WebSocketServerChannel, WebSocketClientChannel } from '@fairhandle/channel-ws'
+import { WebSocketServerChannel, WebSocketClientChannel, WebSocketHubChannel } from '@fairhandle/channel-ws'
 import { SqliteStorageAdapter } from '@fairhandle/storage-sqlite'
 import { StorageGitAdapter } from '@fairhandle/storage-git'
 import { AnthropicLLMAdapter } from '@fairhandle/llm-anthropic'
@@ -81,7 +81,7 @@ export class RoomRegistry {
   async handleTool(name: string, args: ToolArgs): Promise<unknown> {
     switch (name) {
       case 'create_room':
-        return this.createRoom(args as { role_label?: string })
+        return this.createRoom(args as { role_label?: string; mediator_pubkey?: string })
       case 'join_room':
         return this.joinRoom(args as { invite_code: string; role_label?: string })
       case 'send_message':
@@ -114,16 +114,35 @@ export class RoomRegistry {
     return this.mediatorKeypairPromise
   }
 
-  async createRoom(args: { role_label?: string }): Promise<CreateRoomResult> {
+  getRoomHandle(room_id: string): RoomHandle {
+    return this.get(room_id)
+  }
+
+  async createRoom(args: { role_label?: string; mediator_pubkey?: string }): Promise<CreateRoomResult> {
+    if (args.mediator_pubkey !== undefined && args.mediator_pubkey === '') {
+      throw new Error('mediator_pubkey must be a non-empty string when provided')
+    }
+
     const room_id = newRoomId()
-    const config = defaultRoomConfig()
+    const config = {
+      ...defaultRoomConfig(),
+      mediator_pubkey: args.mediator_pubkey ? (args.mediator_pubkey as Pubkey) : null,
+    }
     const myRoleLabel = args.role_label ?? this.cfg.role_label
     const sig = new Ed25519SignatureAdapter()
     const myKp = await sig.generateEphemeralKeyPair()
 
-    const ws = new WebSocketServerChannel({ port: 0 })
-    const port = await ws.listen()
-    const channel: ChannelPort = ws
+    let channel: ChannelPort
+    let port: number
+    if (config.mediator_pubkey !== null) {
+      const hub = new WebSocketHubChannel({ port: 0 })
+      port = await hub.listen()
+      channel = hub
+    } else {
+      const ws = new WebSocketServerChannel({ port: 0 })
+      port = await ws.listen()
+      channel = ws
+    }
 
     const { storage, gitDir, artifactHistory, baseDir } = this.setupStorage(room_id)
     const llm = new AnthropicLLMAdapter()
