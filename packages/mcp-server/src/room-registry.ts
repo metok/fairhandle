@@ -5,6 +5,7 @@ import {
   Room,
   defaultRoomConfig,
   type RoomId,
+  type RoomConfig,
   type ChannelPort,
   type Pubkey,
   type AgentId,
@@ -114,12 +115,16 @@ export class RoomRegistry {
     return this.mediatorKeypairPromise
   }
 
-  getRoomHandle(room_id: string): RoomHandle {
-    return this.get(room_id)
+  getRoomConfig(room_id: string): RoomConfig {
+    return this.get(room_id).room.config
+  }
+
+  getRoomChannel(room_id: string): ChannelPort {
+    return this.get(room_id).channel
   }
 
   async createRoom(args: { role_label?: string; mediator_pubkey?: string }): Promise<CreateRoomResult> {
-    if (args.mediator_pubkey !== undefined && args.mediator_pubkey === '') {
+    if (args.mediator_pubkey === '') {
       throw new Error('mediator_pubkey must be a non-empty string when provided')
     }
 

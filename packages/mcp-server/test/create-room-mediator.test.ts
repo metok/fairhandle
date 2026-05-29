@@ -8,7 +8,6 @@ const FAKE_MEDIATOR_PUBKEY = ('ab'.repeat(32)) as Pubkey
 
 describe('create_room with mediator_pubkey', () => {
   let registry: RoomRegistry
-  let roomId: string
 
   afterEach(async () => {
     await registry.closeAll()
@@ -17,15 +16,12 @@ describe('create_room with mediator_pubkey', () => {
   it('sets mediator_pubkey on room.config when provided', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({ mediator_pubkey: FAKE_MEDIATOR_PUBKEY }) as { room_id: string; invite_code: string }
-    roomId = result.room_id
-    const handle = registry.getRoomHandle(roomId)
-    expect(handle.room.config.mediator_pubkey).toBe(FAKE_MEDIATOR_PUBKEY)
+    expect(registry.getRoomConfig(result.room_id).mediator_pubkey).toBe(FAKE_MEDIATOR_PUBKEY)
   })
 
   it('encodes mediator_pubkey in the invite when provided', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({ mediator_pubkey: FAKE_MEDIATOR_PUBKEY }) as { room_id: string; invite_code: string }
-    roomId = result.room_id
     const decoded = decodeInvite(result.invite_code)
     expect(decoded.mediator_pubkey).toBe(FAKE_MEDIATOR_PUBKEY)
   })
@@ -33,24 +29,19 @@ describe('create_room with mediator_pubkey', () => {
   it('hosts a WebSocketHubChannel when mediator_pubkey is provided', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({ mediator_pubkey: FAKE_MEDIATOR_PUBKEY }) as { room_id: string; invite_code: string }
-    roomId = result.room_id
-    const handle = registry.getRoomHandle(roomId)
-    expect(handle.channel).toBeInstanceOf(WebSocketHubChannel)
+    expect(registry.getRoomChannel(result.room_id)).toBeInstanceOf(WebSocketHubChannel)
   })
 
   it('binds a real port (actualPort > 0) for the hub', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({ mediator_pubkey: FAKE_MEDIATOR_PUBKEY }) as { room_id: string; invite_code: string }
-    roomId = result.room_id
-    const handle = registry.getRoomHandle(roomId)
-    const hub = handle.channel as WebSocketHubChannel
+    const hub = registry.getRoomChannel(result.room_id) as WebSocketHubChannel
     expect(hub.actualPort).toBeGreaterThan(0)
   })
 })
 
 describe('create_room without mediator_pubkey', () => {
   let registry: RoomRegistry
-  let roomId: string
 
   afterEach(async () => {
     await registry.closeAll()
@@ -59,15 +50,12 @@ describe('create_room without mediator_pubkey', () => {
   it('sets mediator_pubkey to null on room.config when not provided', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({}) as { room_id: string; invite_code: string }
-    roomId = result.room_id
-    const handle = registry.getRoomHandle(roomId)
-    expect(handle.room.config.mediator_pubkey).toBeNull()
+    expect(registry.getRoomConfig(result.room_id).mediator_pubkey).toBeNull()
   })
 
   it('encodes null mediator_pubkey in the invite when not provided', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({}) as { room_id: string; invite_code: string }
-    roomId = result.room_id
     const decoded = decodeInvite(result.invite_code)
     expect(decoded.mediator_pubkey).toBeNull()
   })
@@ -75,9 +63,7 @@ describe('create_room without mediator_pubkey', () => {
   it('hosts a WebSocketServerChannel (two-peer path unchanged) when no mediator_pubkey', async () => {
     registry = new RoomRegistry({ role_label: 'peer-a' })
     const result = await registry.createRoom({}) as { room_id: string; invite_code: string }
-    roomId = result.room_id
-    const handle = registry.getRoomHandle(roomId)
-    expect(handle.channel).toBeInstanceOf(WebSocketServerChannel)
+    expect(registry.getRoomChannel(result.room_id)).toBeInstanceOf(WebSocketServerChannel)
   })
 })
 
