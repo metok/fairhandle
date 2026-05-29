@@ -159,6 +159,7 @@ export class RoomRegistry {
       config_hash: hashRoomConfig(config),
       host: '127.0.0.1',
       port,
+      mediator_pubkey: config.mediator_pubkey ?? null,
     })
     return { room_id, invite_code: invite }
   }
@@ -167,7 +168,7 @@ export class RoomRegistry {
     const invite = decodeInvite(args.invite_code)
     const room_id = invite.room_id
     const myRoleLabel = args.role_label ?? this.cfg.role_label
-    const config = defaultRoomConfig()
+    const config = { ...defaultRoomConfig(), mediator_pubkey: (invite.mediator_pubkey ?? null) as Pubkey | null }
     const sig = new Ed25519SignatureAdapter()
     const myKp = await sig.generateEphemeralKeyPair()
     const llm = new AnthropicLLMAdapter()
