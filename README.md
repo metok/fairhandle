@@ -109,6 +109,7 @@ fairhandle is in active development. See [`MILESTONES.md`](./MILESTONES.md).
 | Web UI (per-peer view + dual-pane observer) | shipped |
 | Material-equivalence consolidation + transcript visibility | shipped |
 | Neutral mediator role (single canonical consolidator, peer audit + veto) | shipped |
+| Mediator as MCP-server process (broadcasting hub, three-party eval/demo) | shipped |
 
 The current build is a localhost reference implementation. A real wide-area transport, a
 trusted-execution consolidator, and an A2A binding are on the roadmap.
