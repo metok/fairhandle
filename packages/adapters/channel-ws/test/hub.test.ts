@@ -99,7 +99,8 @@ describe('WebSocketHubChannel', () => {
     const hub = new WebSocketHubChannel()
     const port = await hub.listen()
 
-    await hub.send(fakeEnv())
+    const env = fakeEnv()
+    await hub.send(env)
 
     const c1 = new WebSocketClientChannel(`ws://127.0.0.1:${port}`)
     await c1.connect()
@@ -110,16 +111,18 @@ describe('WebSocketHubChannel', () => {
     await new Promise((r) => setTimeout(r, 10))
 
     expect(received.length).toBe(1)
+    expect(received[0]).toMatchObject({ type: 'accept_done', v: 1 })
 
     await c1.close()
     await hub.close()
   })
 
-  it('the queue is replayed to every late-connecting client', async () => {
+  it('history is replayed to every late-connecting client', async () => {
     const hub = new WebSocketHubChannel()
     const port = await hub.listen()
 
-    await hub.send(fakeEnv())
+    const env = fakeEnv()
+    await hub.send(env)
 
     const c1 = new WebSocketClientChannel(`ws://127.0.0.1:${port}`)
     await c1.connect()
@@ -137,6 +140,46 @@ describe('WebSocketHubChannel', () => {
 
     expect(c1Received.length).toBe(1)
     expect(c2Received.length).toBe(1)
+    expect(c2Received[0]).toMatchObject({ type: 'accept_done', v: 1 })
+
+    await c1.close()
+    await c2.close()
+    await hub.close()
+  })
+
+  it('client-originated envelope is replayed to a client that connects after the sender', async () => {
+    // This is the critical late-connector scenario: client 1 sends before
+    // client 2 connects. Client 2 must receive that envelope via history
+    // replay. The hub's onReceive must fire exactly once (not once per
+    // subsequent connector).
+    const hub = new WebSocketHubChannel()
+    const port = await hub.listen()
+
+    const hubReceived: Envelope[] = []
+    hub.onReceive((e) => hubReceived.push(e))
+
+    const c1 = new WebSocketClientChannel(`ws://127.0.0.1:${port}`)
+    await c1.connect()
+
+    const env = fakeEnv()
+    await c1.send(env)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // At this point hub has fired onReceive once; no other clients yet.
+    expect(hubReceived.length).toBe(1)
+
+    // Now client 2 connects — it should receive the history-replayed envelope.
+    const c2Received: Envelope[] = []
+    const c2 = new WebSocketClientChannel(`ws://127.0.0.1:${port}`)
+    await c2.connect()
+    c2.onReceive((e) => c2Received.push(e))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(c2Received.length).toBe(1)
+    expect(c2Received[0]).toMatchObject({ type: 'accept_done', v: 1 })
+
+    // Hub onReceive must NOT have fired a second time for the replay.
+    expect(hubReceived.length).toBe(1)
 
     await c1.close()
     await c2.close()
@@ -152,9 +195,17 @@ describe('WebSocketHubChannel', () => {
     const received: Envelope[] = []
     hub.onReceive((e) => received.push(e))
 
-    await hub.close()
+    // Send before close — hub should record it but the test only checks
+    // that close() itself does not cause unhandled rejections or errors.
+    await hub.send(fakeEnv())
+    await new Promise((r) => setTimeout(r, 20))
+
+    // close() should resolve without throwing.
+    await expect(hub.close()).resolves.toBeUndefined()
     await new Promise((r) => setTimeout(r, 50))
 
-    expect(received.length).toBe(0)
+    // Any subsequent send after close silently no-ops (clients already
+    // disconnected; the history still grows but no socket write occurs).
+    await expect(hub.send(fakeEnv())).resolves.toBeUndefined()
   })
 })

@@ -9,7 +9,7 @@ export class WebSocketHubChannel implements ChannelPort {
   private wss: WebSocketServer
   private clients = new Set<WebSocket>()
   private handlers = new Set<(env: Envelope) => void>()
-  private queue: Envelope[] = []
+  private history: Envelope[] = []
   public actualPort = 0
 
   constructor(init: HubChannelInit = {}) {
@@ -23,14 +23,18 @@ export class WebSocketHubChannel implements ChannelPort {
         if (typeof addr === 'object' && addr) this.actualPort = addr.port
         this.wss.on('connection', (ws) => {
           this.clients.add(ws)
-          // Flush buffered host-sends only to this newly connected client.
-          // Already-connected clients received those envelopes live.
-          for (const env of this.queue) ws.send(JSON.stringify(env))
+          // Replay the full history to this newly connected client before
+          // any live messages can reach it. This ensures late connectors
+          // see every envelope that has ever flowed through the hub.
+          for (const env of this.history) ws.send(JSON.stringify(env))
           ws.on('message', (data) => {
             try {
               const env: Envelope = JSON.parse(data.toString())
-              // Deliver to local handlers first, then forward to all other clients.
+              // Deliver to local handlers first.
               for (const h of this.handlers) h(env)
+              // Record in history so future connectors replay it.
+              this.history.push(env)
+              // Forward to every OTHER currently-connected client (not the sender).
               for (const peer of this.clients) {
                 if (peer !== ws) peer.send(JSON.stringify(env))
               }
@@ -46,7 +50,9 @@ export class WebSocketHubChannel implements ChannelPort {
   }
 
   async send(env: Envelope): Promise<void> {
-    if (this.clients.size === 0) { this.queue.push(env); return }
+    // Always record in history so future connectors replay it.
+    this.history.push(env)
+    // Broadcast to all currently-connected clients.
     const serialised = JSON.stringify(env)
     for (const ws of this.clients) ws.send(serialised)
   }
