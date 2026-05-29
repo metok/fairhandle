@@ -168,7 +168,7 @@ export class RoomRegistry {
     const invite = decodeInvite(args.invite_code)
     const room_id = invite.room_id
     const myRoleLabel = args.role_label ?? this.cfg.role_label
-    const config = { ...defaultRoomConfig(), mediator_pubkey: (invite.mediator_pubkey ?? null) as Pubkey | null }
+    const config = { ...defaultRoomConfig(), mediator_pubkey: invite.mediator_pubkey ?? null }
     const sig = new Ed25519SignatureAdapter()
     const myKp = await sig.generateEphemeralKeyPair()
     const llm = new AnthropicLLMAdapter()

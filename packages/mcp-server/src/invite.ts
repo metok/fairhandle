@@ -8,7 +8,7 @@ export interface InviteCode {
   config_hash: string
   host: string
   port: number
-  mediator_pubkey: string | null
+  mediator_pubkey: Pubkey | null
 }
 
 export function encodeInvite(code: InviteCode): string {
@@ -27,7 +27,7 @@ export function decodeInvite(s: string): InviteCode {
     config_hash: parts[2]!,
     host: parts[3]!,
     port: parseInt(parts[4]!, 10),
-    mediator_pubkey: rawMed.length > 0 ? rawMed : null,
+    mediator_pubkey: rawMed.length > 0 ? (rawMed as Pubkey) : null,
   }
 }
 
