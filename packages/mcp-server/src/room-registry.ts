@@ -224,7 +224,9 @@ export class RoomRegistry {
       loopPromise: Promise.resolve(),
       closed: false,
     }
-    handle.loopPromise = this.driveLoop(room_id, handle, 'A')
+    handle.loopPromise = config.mediator_pubkey !== null
+      ? this.drivePeerReviewLoop(room_id, handle)
+      : this.driveTwoPeerLoop(room_id, handle, 'A')
     this.rooms.set(room_id, handle)
 
     const invite = encodeInvite({
@@ -279,10 +281,11 @@ export class RoomRegistry {
     for (const ev of joinEvents) await channel.send(ev.payload)
     await this.persistEvents(room_id, room, storage)
 
-    // Find my participant index by pubkey
+    // Find my participant index within peers only (ignoring any mediator in participants).
     const myParticipant = room.participants.find((p) => p.pubkey === myKp.pubkey)
     if (!myParticipant) throw new Error('failed to find own participant after join')
-    const myIdx = room.participants.indexOf(myParticipant) === 1 ? 1 : 0
+    const peers = room.participants.filter((p) => p.role === 'peer')
+    const myIdx = peers.indexOf(myParticipant) === 0 ? 0 : 1
 
     const handle: RoomHandle = {
       room,
@@ -301,7 +304,9 @@ export class RoomRegistry {
       loopPromise: Promise.resolve(),
       closed: false,
     }
-    handle.loopPromise = this.driveLoop(room_id, handle, 'B')
+    handle.loopPromise = config.mediator_pubkey !== null
+      ? this.drivePeerReviewLoop(room_id, handle)
+      : this.driveTwoPeerLoop(room_id, handle, 'B')
     this.rooms.set(room_id, handle)
     return { room_id }
   }
@@ -379,6 +384,7 @@ export class RoomRegistry {
       loopPromise: Promise.resolve(),
       closed: false,
     }
+    handle.loopPromise = this.driveMediatorLoop(room_id, handle)
     this.rooms.set(room_id, handle)
     return { room_id }
   }
@@ -506,11 +512,13 @@ export class RoomRegistry {
   }
 
   async closeAll(): Promise<void> {
-    for (const h of this.rooms.values()) {
+    const handles = [...this.rooms.values()]
+    for (const h of handles) {
       h.closed = true
       await h.channel.close()
       h.storage.close()
     }
+    await Promise.allSettled(handles.map((h) => h.loopPromise))
     this.rooms.clear()
   }
 
@@ -552,12 +560,7 @@ export class RoomRegistry {
     return tail
   }
 
-  /**
-   * Background loop that auto-runs consolidation when the room enters that state,
-   * and auto-merges on the low-node side. Per spec, A is always the low-node id when
-   * the initiator is A. Plan 1 keeps this assumption.
-   */
-  private async driveLoop(room_id: string, h: RoomHandle, node: 'A' | 'B'): Promise<void> {
+  private async driveTwoPeerLoop(room_id: string, h: RoomHandle, node: 'A' | 'B'): Promise<void> {
     while (!h.closed) {
       try {
         await waitFor(
@@ -610,6 +613,103 @@ export class RoomRegistry {
       }
     }
   }
+
+  private async drivePeerReviewLoop(room_id: string, h: RoomHandle): Promise<void> {
+    while (!h.closed) {
+      try {
+        await waitFor(
+          () => h.closed || h.room.state === 'consolidating' || isTerminal(h.room.state),
+          365 * 24 * 60 * 60 * 1000,
+          'peer-review loop predicate',
+        )
+        if (h.closed || isTerminal(h.room.state)) return
+        if (h.room.state !== 'consolidating') continue
+
+        const roundAtEntry = h.room.current_round
+
+        await waitFor(
+          () => h.closed || h.room.pending_consolidation != null || h.room.current_round !== roundAtEntry || isTerminal(h.room.state),
+          120_000,
+          'pending consolidation never arrived',
+        )
+        if (h.closed) return
+        if (isTerminal(h.room.state)) return
+        if (h.room.current_round !== roundAtEntry) continue
+
+        const event = await h.room.reviewConsolidation({
+          agent_id: h.myAgentId,
+          llm: h.llm,
+          signature: 'placeholder' as never,
+        })
+        await h.channel.send(event.payload)
+        await this.persistEvents(room_id, h.room, h.storage)
+
+        await waitFor(
+          () => h.closed || h.room.current_round !== roundAtEntry || isTerminal(h.room.state),
+          120_000,
+          'never left consolidating round after review',
+        )
+      } catch (e) {
+        if (h.closed) return
+        // eslint-disable-next-line no-console
+        console.error(`[peerReviewLoop ${room_id}]`, e)
+        await new Promise((r) => setTimeout(r, 1000))
+      }
+    }
+  }
+
+  private async driveMediatorLoop(room_id: string, h: RoomHandle): Promise<void> {
+    while (!h.closed) {
+      try {
+        await waitFor(
+          () => h.closed || h.room.state === 'consolidating' || isTerminal(h.room.state),
+          365 * 24 * 60 * 60 * 1000,
+          'mediator loop predicate',
+        )
+        if (h.closed || isTerminal(h.room.state)) return
+        if (h.room.state !== 'consolidating') continue
+
+        const roundAtEntry = h.room.current_round
+
+        const propEvent = await h.room.runMediatorConsolidation({
+          llm: h.llm,
+          signature: 'placeholder' as never,
+        })
+        await h.channel.send(propEvent.payload)
+        await this.persistEvents(room_id, h.room, h.storage)
+
+        await waitFor(
+          () => h.closed || allPeersAccepted(h.room) || h.room.current_round !== roundAtEntry || isTerminal(h.room.state),
+          120_000,
+          'waiting for peer accepts',
+        )
+        if (h.closed) return
+        if (isTerminal(h.room.state)) return
+        if (h.room.current_round !== roundAtEntry) continue
+
+        if (allPeersAccepted(h.room)) {
+          const mergeEvent = await h.room.runMediatorMerge({
+            signature: 'placeholder' as never,
+          })
+          await h.channel.send(mergeEvent.payload)
+          await this.persistEvents(room_id, h.room, h.storage)
+        }
+      } catch (e) {
+        if (h.closed) return
+        // eslint-disable-next-line no-console
+        console.error(`[mediatorLoop ${room_id}]`, e)
+        await new Promise((r) => setTimeout(r, 1000))
+      }
+    }
+  }
+
+  getRoomCurrentArtifact(room_id: string): unknown {
+    return this.get(room_id).room.current_artifact
+  }
+
+  getRoomLogHeadHash(room_id: string): string | null {
+    return this.get(room_id).room.log.getHeadHash()
+  }
 }
 
 async function waitFor(pred: () => boolean, timeout: number, msg: string): Promise<void> {
@@ -618,4 +718,14 @@ async function waitFor(pred: () => boolean, timeout: number, msg: string): Promi
     if (Date.now() - start > timeout) throw new Error('timeout: ' + msg)
     await new Promise((r) => setTimeout(r, 100))
   }
+}
+
+function isTerminal(state: string): boolean {
+  return state === 'closing' || state === 'closed'
+}
+
+function allPeersAccepted(room: Room): boolean {
+  return room.participants
+    .filter((p) => p.role === 'peer')
+    .every((p) => room.roundAccepts.includes(p.agent_id))
 }
