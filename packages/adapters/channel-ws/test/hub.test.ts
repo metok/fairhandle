@@ -115,7 +115,7 @@ describe('WebSocketHubChannel', () => {
     await hub.close()
   })
 
-  it('buffer is only delivered to the first connector, not subsequent clients', async () => {
+  it('the queue is replayed to every late-connecting client', async () => {
     const hub = new WebSocketHubChannel()
     const port = await hub.listen()
 
@@ -136,7 +136,7 @@ describe('WebSocketHubChannel', () => {
     await new Promise((r) => setTimeout(r, 10))
 
     expect(c1Received.length).toBe(1)
-    expect(c2Received.length).toBe(0)
+    expect(c2Received.length).toBe(1)
 
     await c1.close()
     await c2.close()

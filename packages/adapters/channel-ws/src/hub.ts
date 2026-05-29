@@ -26,7 +26,6 @@ export class WebSocketHubChannel implements ChannelPort {
           // Flush buffered host-sends only to this newly connected client.
           // Already-connected clients received those envelopes live.
           for (const env of this.queue) ws.send(JSON.stringify(env))
-          this.queue = []
           ws.on('message', (data) => {
             try {
               const env: Envelope = JSON.parse(data.toString())
