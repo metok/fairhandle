@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createPairedChannels, createBroadcastChannels } from '../src/index.js'
+import { createPairedChannels, createBroadcastChannels, createReplayBroadcastChannels } from '../src/index.js'
 import type { Envelope, AcceptDonePayload, RoomId, AgentId, HashHex, SignatureHex } from '@fairhandle/domain'
 
 function fakeEnvelope(): Envelope {
@@ -109,5 +109,60 @@ describe('createBroadcastChannels', () => {
     const ch0 = createBroadcastChannels(3)[0]!
     await ch0.close()
     await expect(ch0.send(fakeEnvelope())).rejects.toThrow('channel closed')
+  })
+})
+
+async function flush(iterations = 10) {
+  for (let i = 0; i < iterations; i++) {
+    await new Promise((r) => setTimeout(r, 0))
+  }
+}
+
+describe('createReplayBroadcastChannels', () => {
+  it('delivers messages to already-registered handlers', async () => {
+    const [ch0, ch1, ch2] = createReplayBroadcastChannels(3)
+    const recv1: Envelope[] = []
+    const recv2: Envelope[] = []
+    ch1!.onReceive((e) => recv1.push(e))
+    ch2!.onReceive((e) => recv2.push(e))
+    const env = fakeEnvelope()
+    await ch0!.send(env)
+    await flush()
+    expect(recv1).toEqual([env])
+    expect(recv2).toEqual([env])
+  })
+
+  it('replays history to a handler registered after send', async () => {
+    const [ch0, ch1, ch2] = createReplayBroadcastChannels(3)
+    const env = fakeEnvelope()
+    await ch0!.send(env)
+    await flush()
+
+    const recv1: Envelope[] = []
+    ch1!.onReceive((e) => recv1.push(e))
+    expect(recv1).toEqual([env])
+
+    const recv2: Envelope[] = []
+    ch2!.onReceive((e) => recv2.push(e))
+    expect(recv2).toEqual([env])
+  })
+
+  it('does not replay to sender', async () => {
+    const [ch0, ch1] = createReplayBroadcastChannels(2)
+    const env = fakeEnvelope()
+    await ch0!.send(env)
+    await flush()
+
+    const recv0: Envelope[] = []
+    ch0!.onReceive((e) => recv0.push(e))
+    expect(recv0).toEqual([])
+
+    const recv1: Envelope[] = []
+    ch1!.onReceive((e) => recv1.push(e))
+    expect(recv1).toEqual([env])
+  })
+
+  it('throws when n is less than 2', () => {
+    expect(() => createReplayBroadcastChannels(1)).toThrow()
   })
 })

@@ -11,6 +11,7 @@ import {
   type Pubkey,
   type AgentId,
   type Envelope,
+  type KeyPair,
 } from '@fairhandle/domain'
 import { Ed25519SignatureAdapter } from '@fairhandle/signature-ed25519'
 import { WebSocketServerChannel, WebSocketClientChannel, WebSocketHubChannel } from '@fairhandle/channel-ws'
@@ -53,6 +54,7 @@ interface RoomHandle {
   gitDir: string
   artifactHistory: StorageGitAdapter
   sig: Ed25519SignatureAdapter
+  identityKeypair: KeyPair
   myAgentId: AgentId
   myPubkey: Pubkey
   myIdx: 0 | 1
@@ -81,7 +83,8 @@ export class RoomRegistry {
   private rooms = new Map<string, RoomHandle>()
   private clock = new SystemClock()
   private baseDir: string
-  private mediatorKeypairPromise: Promise<{ pubkey: string; private_handle: unknown }> | null = null
+  private mediatorKeypairPromise: Promise<KeyPair> | null = null
+  private mediatorSig: Ed25519SignatureAdapter | null = null
   // Per-room serialization queues: concurrent persistEvents calls are chained
   // to prevent UNIQUE constraint violations on the SQLite event log.
   private persistTails = new Map<string, Promise<void>>()
@@ -128,9 +131,10 @@ export class RoomRegistry {
     return { pubkey: kp.pubkey }
   }
 
-  private getMediatorKeypair(): Promise<{ pubkey: string; private_handle: unknown }> {
+  private getMediatorKeypair(): Promise<KeyPair> {
     if (this.mediatorKeypairPromise === null) {
       const sig = new Ed25519SignatureAdapter()
+      this.mediatorSig = sig
       this.mediatorKeypairPromise = sig.generateEphemeralKeyPair()
     }
     return this.mediatorKeypairPromise
@@ -142,6 +146,10 @@ export class RoomRegistry {
 
   getRoomChannel(room_id: string): ChannelPort {
     return this.get(room_id).channel
+  }
+
+  getRoomIdentityPubkey(room_id: string): Pubkey {
+    return this.get(room_id).identityKeypair.pubkey
   }
 
   async createRoom(args: { role_label?: string; mediator_pubkey?: string }): Promise<CreateRoomResult> {
@@ -206,6 +214,7 @@ export class RoomRegistry {
       gitDir,
       artifactHistory,
       sig,
+      identityKeypair: myKp,
       myAgentId,
       myPubkey: myKp.pubkey,
       myIdx: 0,
@@ -282,6 +291,7 @@ export class RoomRegistry {
       gitDir,
       artifactHistory,
       sig,
+      identityKeypair: myKp,
       myAgentId: myParticipant.agent_id,
       myPubkey: myKp.pubkey,
       myIdx: myIdx as 0 | 1,
@@ -312,7 +322,7 @@ export class RoomRegistry {
 
     const config: RoomConfig = { ...defaultRoomConfig(), mediator_pubkey: invite.mediator_pubkey }
 
-    const sig = new Ed25519SignatureAdapter()
+    const sig = this.mediatorSig ?? new Ed25519SignatureAdapter()
     const llm: LLMPort = this.cfg.llm_factory ? this.cfg.llm_factory() : new AnthropicLLMAdapter()
 
     const url = `ws://${invite.host}:${invite.port}`
@@ -359,6 +369,7 @@ export class RoomRegistry {
       gitDir,
       artifactHistory,
       sig,
+      identityKeypair: mediatorKp,
       myAgentId: mediatorParticipant.agent_id,
       myPubkey: mediatorKp.pubkey as Pubkey,
       myIdx: 0,
@@ -536,7 +547,8 @@ export class RoomRegistry {
       const chainPath = join(this.rooms.get(room_id)?.baseDir ?? this.baseDir, 'chain.json')
       writeFileSync(chainPath, JSON.stringify({ room_id, events }))
     })
-    this.persistTails.set(room_id, tail.catch(() => {}))
+    // eslint-disable-next-line no-console
+    this.persistTails.set(room_id, tail.catch((err) => { console.error('[persistEvents]', room_id, err) }))
     return tail
   }
 

@@ -1,60 +1,30 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { RoomRegistry } from '../src/room-registry.js'
 import { ScriptedLLMAdapter } from '@fairhandle/llm-stub'
+import { createReplayBroadcastChannels } from '@fairhandle/channel-memory'
 import type { ChannelPort, Envelope } from '@fairhandle/domain'
 
-// flush() drains the microtask/timer queue so async deliveries settle.
 async function flush(iterations = 10) {
   for (let i = 0; i < iterations; i++) {
     await new Promise((r) => setTimeout(r, 0))
   }
 }
 
-type Handler = (env: Envelope) => void
-
-/**
- * InMemoryHub simulates a WebSocketHubChannel with full history replay.
- * Any message sent to the hub is broadcast to ALL registered handlers AND
- * added to history. When a new handler is registered via onReceive, all
- * existing history is replayed to it synchronously (matching WS hub behaviour).
- *
- * A single hub instance is shared across all parties. Each party gets its
- * own HubClientView which routes sends THROUGH the hub.
- */
-class InMemoryHub {
-  private history: Envelope[] = []
-  private handlers = new Set<Handler>()
-
-  broadcast(env: Envelope): void {
-    this.history.push(env)
-    for (const h of this.handlers) h(env)
+function asHost(ch: ChannelPort): ChannelPort & { listen: () => Promise<number> } {
+  return {
+    send: (env: Envelope) => ch.send(env),
+    onReceive: (h) => ch.onReceive(h),
+    close: () => ch.close(),
+    listen: async () => 0,
   }
+}
 
-  addReceiver(handler: Handler): () => void {
-    // Replay history first.
-    for (const env of this.history) handler(env)
-    this.handlers.add(handler)
-    return () => { this.handlers.delete(handler) }
-  }
-
-  asHostChannel(): ChannelPort & { listen: () => Promise<number> } {
-    const hub = this
-    return {
-      send: async (env: Envelope): Promise<void> => { hub.broadcast(env) },
-      onReceive: (handler: Handler) => hub.addReceiver(handler),
-      close: async (): Promise<void> => {},
-      listen: async (): Promise<number> => 0,
-    }
-  }
-
-  asClientChannel(): ChannelPort & { connect: () => Promise<void> } {
-    const hub = this
-    return {
-      send: async (env: Envelope): Promise<void> => { hub.broadcast(env) },
-      onReceive: (handler: Handler) => hub.addReceiver(handler),
-      close: async (): Promise<void> => {},
-      connect: async (): Promise<void> => {},
-    }
+function asClient(ch: ChannelPort): ChannelPort & { connect: () => Promise<void> } {
+  return {
+    send: (env: Envelope) => ch.send(env),
+    onReceive: (h) => ch.onReceive(h),
+    close: () => ch.close(),
+    connect: async () => undefined,
   }
 }
 
@@ -67,9 +37,10 @@ describe('joinAsMediator — in-process with channel/LLM injection', () => {
   })
 
   it('all three registries have the room; participants = 2 peers + 1 mediator; state = active', async () => {
-    // A single InMemoryHub serves as the broadcast hub for the room.
-    // All parties share the same hub: send() broadcasts and onReceive() replays history.
-    const hub = new InMemoryHub()
+    // Three replay broadcast channels: index 0 = Alice/host, 1 = Bob/client, 2 = Mediator/client.
+    // Each send is broadcast to the other two and replayed to late-registered handlers,
+    // mirroring WebSocketHubChannel semantics.
+    const [chA, chB, chM] = createReplayBroadcastChannels(3)
 
     const stubbedLLM = () => new ScriptedLLMAdapter({
       consolidatorOutputs: [],
@@ -78,24 +49,24 @@ describe('joinAsMediator — in-process with channel/LLM injection', () => {
 
     const registryA = new RoomRegistry({
       role_label: 'Alice',
-      host_channel_factory: () => hub.asHostChannel(),
-      client_channel_factory: () => hub.asClientChannel(),
+      host_channel_factory: () => asHost(chA!),
+      client_channel_factory: () => asClient(chA!),
       llm_factory: stubbedLLM,
     })
     registries.push(registryA)
 
     const registryB = new RoomRegistry({
       role_label: 'Bob',
-      host_channel_factory: () => hub.asHostChannel(),
-      client_channel_factory: () => hub.asClientChannel(),
+      host_channel_factory: () => asHost(chB!),
+      client_channel_factory: () => asClient(chB!),
       llm_factory: stubbedLLM,
     })
     registries.push(registryB)
 
     const registryM = new RoomRegistry({
       role_label: 'Mediator',
-      host_channel_factory: () => hub.asHostChannel(),
-      client_channel_factory: () => hub.asClientChannel(),
+      host_channel_factory: () => asHost(chM!),
+      client_channel_factory: () => asClient(chM!),
       llm_factory: stubbedLLM,
     })
     registries.push(registryM)
@@ -112,7 +83,7 @@ describe('joinAsMediator — in-process with channel/LLM injection', () => {
     const { room_id, invite_code } = createResult
     await flush()
 
-    // Step 3: Bob joins — onReceive on hub replays Alice's join event immediately
+    // Step 3: Bob joins — replay delivers Alice's join event
     const joinResult = await registryB.handleTool('join_room', {
       invite_code,
       role_label: 'Bob',
@@ -120,7 +91,7 @@ describe('joinAsMediator — in-process with channel/LLM injection', () => {
     expect(joinResult.room_id).toBe(room_id)
     await flush()
 
-    // Step 4: Mediator joins — onReceive replays Alice+Bob join events
+    // Step 4: Mediator joins — replay delivers Alice+Bob join events
     const mediatorResult = await registryM.handleTool('join_as_mediator', {
       invite_code,
     }) as { room_id: string }
@@ -145,6 +116,9 @@ describe('joinAsMediator — in-process with channel/LLM injection', () => {
     const bState = await registryB.handleTool('get_room_state', { room_id }) as { state: string }
     expect(aState.state).toBe('active')
     expect(bState.state).toBe('active')
+
+    // Fix 1 assertion: the mediator handle's identity pubkey matches the cached mediator identity
+    expect(registryM.getRoomIdentityPubkey(room_id)).toBe(mediatorPubkey)
   }, 30_000)
 })
 

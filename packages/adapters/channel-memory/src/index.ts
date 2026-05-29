@@ -82,3 +82,51 @@ export function createBroadcastChannels(n: number): ChannelPort[] {
   }
   return channels
 }
+
+class InMemoryReplayBroadcastChannel implements ChannelPort {
+  private handlers = new Set<Handler>()
+  private peers: InMemoryReplayBroadcastChannel[] = []
+  private closed = false
+  private history: Envelope[] = []
+
+  bindPeers(peers: InMemoryReplayBroadcastChannel[]): void {
+    this.peers = peers
+  }
+
+  appendHistory(env: Envelope): void {
+    this.history.push(env)
+  }
+
+  async send(env: Envelope): Promise<void> {
+    if (this.closed) throw new Error('channel closed')
+    const peers = this.peers
+    queueMicrotask(() => {
+      for (const peer of peers) {
+        peer.appendHistory(env)
+        for (const h of peer.handlers) h(env)
+      }
+    })
+  }
+
+  onReceive(handler: Handler): () => void {
+    for (const env of this.history) handler(env)
+    this.handlers.add(handler)
+    return () => {
+      this.handlers.delete(handler)
+    }
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    this.handlers.clear()
+  }
+}
+
+export function createReplayBroadcastChannels(n: number): ChannelPort[] {
+  if (n < 2) throw new Error('createReplayBroadcastChannels requires n >= 2')
+  const channels = Array.from({ length: n }, () => new InMemoryReplayBroadcastChannel())
+  for (const ch of channels) {
+    ch.bindPeers(channels.filter((other) => other !== ch))
+  }
+  return channels
+}
