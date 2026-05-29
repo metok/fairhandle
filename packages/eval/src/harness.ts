@@ -43,6 +43,101 @@ export interface RunScenarioOptions {
   graderModel: string
 }
 
+/** Run one full mediated negotiation: spawn three MCP servers (peerA, peerB, mediator), hand off, drive both peer agents, grade. */
+export async function runMediatorScenarioOnce(opts: RunScenarioOptions): Promise<GradedRun> {
+  const { scenario, runIndex, anthropic, agentModel, graderModel } = opts
+  const start = Date.now()
+  const portA = randomPort()
+  const portB = portA + 1
+  const portM = portA + 2
+
+  const transportM = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP_BIN],
+    env: { ...process.env, FH_ROLE_LABEL: 'Mediator', FH_HTTP_PORT: String(portM) } as Record<string, string>,
+  })
+  const transportA = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP_BIN],
+    env: { ...process.env, FH_ROLE_LABEL: 'PeerA', FH_HTTP_PORT: String(portA) } as Record<string, string>,
+  })
+  const transportB = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP_BIN],
+    env: { ...process.env, FH_ROLE_LABEL: 'PeerB', FH_HTTP_PORT: String(portB) } as Record<string, string>,
+  })
+  const clientM = new Client({ name: 'eval-m', version: '0' }, { capabilities: {} })
+  const clientA = new Client({ name: 'eval-a', version: '0' }, { capabilities: {} })
+  const clientB = new Client({ name: 'eval-b', version: '0' }, { capabilities: {} })
+
+  let error: string | null = null
+  let stateA: RoomStateLike | null = null
+  let stateB: RoomStateLike | null = null
+
+  try {
+    await clientM.connect(transportM)
+    const { pubkey: mediator_pubkey } = JSON.parse(
+      textOf(await clientM.callTool({ name: 'get_mediator_identity' })),
+    ) as { pubkey: string }
+
+    await clientA.connect(transportA)
+    const created = await clientA.callTool({
+      name: 'create_room',
+      arguments: { role_label: 'Alice', mediator_pubkey },
+    })
+    const { room_id, invite_code } = JSON.parse(textOf(created)) as {
+      room_id: string
+      invite_code: string
+    }
+
+    await clientB.connect(transportB)
+    await clientB.callTool({
+      name: 'join_room',
+      arguments: { invite_code, role_label: 'Bob' },
+    })
+
+    await clientM.callTool({
+      name: 'join_as_mediator',
+      arguments: { invite_code },
+    })
+
+    await waitForActive(clientA, room_id)
+
+    await Promise.all([
+      runAgent({ anthropic, model: agentModel, mcp: clientA, system: scenario.briefA, roomId: room_id }),
+      runAgent({ anthropic, model: agentModel, mcp: clientB, system: scenario.briefB, roomId: room_id }),
+    ])
+
+    stateA = await getState(clientA, room_id)
+    stateB = await getState(clientB, room_id)
+  } catch (e) {
+    error = (e as Error).message
+  } finally {
+    await clientA.close().catch(() => {})
+    await clientB.close().catch(() => {})
+    await clientM.close().catch(() => {})
+  }
+
+  const fallback: RoomStateLike = {
+    state: 'unknown',
+    current_round: 0,
+    head_hash: null,
+    hard_limit_hit: null,
+    walk_away_by: null,
+    artifact: null,
+  }
+  return gradeRun({
+    runIndex,
+    scenario,
+    stateA: stateA ?? fallback,
+    stateB: stateB ?? fallback,
+    anthropic,
+    graderModel,
+    durationMs: Date.now() - start,
+    error,
+  })
+}
+
 /** Run one full negotiation: spawn two MCP servers, hand off, drive both agents, grade. */
 export async function runScenarioOnce(opts: RunScenarioOptions): Promise<GradedRun> {
   const { scenario, runIndex, anthropic, agentModel, graderModel } = opts
