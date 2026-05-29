@@ -22,7 +22,8 @@
     "@fairhandle/clock-system": "workspace:*",
     "@fairhandle/identity-keychain": "workspace:*",
     "@fairhandle/storage-git": "workspace:*",
-    "@fairhandle/verifier": "workspace:*"
+    "@fairhandle/verifier": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
     "tsx": "^4.19.0"
