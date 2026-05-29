@@ -80,4 +80,13 @@ export const TOOL_SPECS: Record<string, ToolSpec> = {
       required: ['room_id'],
     },
   },
+  get_mediator_identity: {
+    description:
+      'Return this server\'s mediator pubkey. Call this BEFORE create_room when configuring a mediated room — the initiator commits to this pubkey in the room config.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 }

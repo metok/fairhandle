@@ -64,6 +64,7 @@ export class RoomRegistry {
   private rooms = new Map<string, RoomHandle>()
   private clock = new SystemClock()
   private baseDir: string
+  private mediatorKeypairPromise: Promise<{ pubkey: string; private_handle: unknown }> | null = null
 
   constructor(private readonly cfg: RoomRegistryConfig) {
     this.baseDir = cfg.base_dir ?? mkdtempSync(join(tmpdir(), 'fairhandle-mcp-'))
@@ -93,9 +94,24 @@ export class RoomRegistry {
         return this.leaveRoom(args as { room_id: string; reason: string })
       case 'get_room_state':
         return this.getRoomState(args as { room_id: string })
+      case 'get_mediator_identity':
+        return this.getMediatorIdentity()
       default:
         throw new Error(`unknown tool: ${name}`)
     }
+  }
+
+  private async getMediatorIdentity(): Promise<{ pubkey: string }> {
+    const kp = await this.getMediatorKeypair()
+    return { pubkey: kp.pubkey }
+  }
+
+  private getMediatorKeypair(): Promise<{ pubkey: string; private_handle: unknown }> {
+    if (this.mediatorKeypairPromise === null) {
+      const sig = new Ed25519SignatureAdapter()
+      this.mediatorKeypairPromise = sig.generateEphemeralKeyPair()
+    }
+    return this.mediatorKeypairPromise
   }
 
   async createRoom(args: { role_label?: string }): Promise<CreateRoomResult> {
